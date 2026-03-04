@@ -1,6 +1,13 @@
 {
   "indexes": [
     {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "congregationId", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "segments",
       "queryScope": "COLLECTION",
       "fields": [

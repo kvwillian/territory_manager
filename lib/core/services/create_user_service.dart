@@ -9,20 +9,26 @@ class CreateUserService {
   final FirebaseFunctions _functions = FirebaseFunctions.instance;
 
   /// Creates a Firebase Auth user and Firestore user document.
-  /// congregationId is inherited from the admin (passed by Cloud Function).
+  /// Pass [congregationId] to ensure the new user belongs to the admin's congregation.
   /// Throws [FirebaseFunctionsException] on failure.
   Future<UserModel> createUser({
     required String email,
     required String password,
     required String name,
     required UserRole role,
+    String? congregationId,
   }) async {
-    final result = await _functions.httpsCallable('createUser').call({
+    final payload = <String, dynamic>{
       'email': email,
       'password': password,
       'name': name,
       'role': role.name,
-    });
+    };
+    if (congregationId != null && congregationId.isNotEmpty) {
+      payload['congregationId'] = congregationId;
+    }
+
+    final result = await _functions.httpsCallable('createUser').call(payload);
 
     final data = result.data as Map<String, dynamic>;
     return UserModel(
@@ -33,7 +39,7 @@ class CreateUserService {
         (e) => e.name == data['role'],
         orElse: () => UserRole.conductor,
       ),
-      congregationId: data['congregationId'] as String?,
+      congregationId: data['congregationId'] as String? ?? congregationId,
     );
   }
 }

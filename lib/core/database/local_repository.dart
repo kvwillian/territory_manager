@@ -223,6 +223,11 @@ class LocalRepository {
         );
   }
 
+  Future<int> getPendingSyncItemsCount() async {
+    final rows = await _db.select(_db.syncQueue).get();
+    return rows.length;
+  }
+
   Future<List<SyncQueueItem>> getPendingSyncItems() async {
     final rows = await _db.select(_db.syncQueue).get();
     return rows

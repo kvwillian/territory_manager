@@ -27,9 +27,9 @@ final territoryRepositoryProvider = Provider<TerritoryRepository>((ref) {
       return OfflineTerritoryRepository(
         remote: FirestoreTerritoryRepository(ref.watch(currentCongregationProvider)),
         local: LocalRepository(db),
-        syncService: ref.watch(offlineSyncServiceProvider),
         connectivity: ConnectivityService(),
         onInvalidate: () => invalidateTerritories?.call(),
+        onReadFromCache: () => ref.read(offlineSyncServiceProvider).refreshFromFirestore().then((_) => invalidateTerritories?.call()),
         congregationId: ref.watch(currentCongregationProvider),
       );
     }

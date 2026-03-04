@@ -3,29 +3,29 @@ import 'package:flutter/foundation.dart';
 import '../../../core/constants/congregation_constants.dart';
 import '../../../core/database/local_repository.dart';
 import '../../../core/services/connectivity_service.dart';
-import '../../../core/services/offline_sync_service.dart';
 import '../models/territory_model.dart';
 import 'territory_repository.dart';
 
 /// Territory repository with offline support.
-/// Reads from local first, syncs from Firestore in background.
-/// Writes go to local immediately; Firestore when online, else queued.
+/// Reads from local first; optionally triggers background refresh via callback.
+/// Writes go to local immediately; Firestore when online.
 class OfflineTerritoryRepository implements TerritoryRepository {
   OfflineTerritoryRepository({
     required this.remote,
     required this.local,
-    required this.syncService,
     required this.connectivity,
     required this.onInvalidate,
+    this.onReadFromCache,
     this.congregationId,
   });
 
   final TerritoryRepository remote;
   final String? congregationId;
   final LocalRepository local;
-  final OfflineSyncService syncService;
   final ConnectivityService connectivity;
   final VoidCallback onInvalidate;
+  /// Called when returning cached data; used to trigger background refresh.
+  final VoidCallback? onReadFromCache;
 
   @override
   Future<List<TerritoryModel>> getTerritories() async {
@@ -36,7 +36,7 @@ class OfflineTerritoryRepository implements TerritoryRepository {
       final cid = congregationId ?? defaultCongregationId;
       final maps = await local.getTerritories(cid);
       final result = maps.map((m) => TerritoryModel.fromMap(m)).toList();
-      syncService.refreshFromFirestore().then((_) => onInvalidate());
+      onReadFromCache?.call();
       return result;
     }
 
@@ -68,7 +68,7 @@ class OfflineTerritoryRepository implements TerritoryRepository {
 
     final cached = await local.getTerritoryById(id);
     if (cached != null) {
-      syncService.refreshFromFirestore().then((_) => onInvalidate());
+      onReadFromCache?.call();
       return TerritoryModel.fromMap(cached);
     }
 

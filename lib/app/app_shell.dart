@@ -7,6 +7,7 @@ import 'dart:async';
 import '../core/constants/app_colors.dart';
 import '../core/constants/app_spacing.dart';
 import '../core/providers/territory_image_provider.dart';
+import '../shared/widgets/sync_status_chip.dart';
 import '../features/admin/providers/territories_provider.dart';
 import '../features/meetings/providers/meeting_location_repository_provider.dart';
 import '../core/services/connectivity_service.dart';
@@ -34,6 +35,7 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   StreamSubscription? _connectivitySubscription;
+  bool _syncStarted = false;
 
   @override
   void initState() {
@@ -41,11 +43,17 @@ class _AppShellState extends ConsumerState<AppShell> {
     _connectivitySubscription =
         ConnectivityService().onConnectivityChanged.listen((online) {
       if (online) {
-        ref.read(offlineSyncServiceProvider).processSyncQueue();
+        final sync = ref.read(offlineSyncServiceProvider);
+        if (!sync.isSyncing) {
+          sync.processSyncQueue();
+        }
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(offlineSyncServiceProvider).performInitialSync();
+      if (!_syncStarted) {
+        _syncStarted = true;
+        ref.read(offlineSyncServiceProvider).performInitialSync();
+      }
     });
   }
 
@@ -99,6 +107,9 @@ class _AppShellState extends ConsumerState<AppShell> {
           icon: const Icon(Icons.menu),
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
+        actions: const [
+          SyncStatusChip(),
+        ],
       ),
       drawer: _AppDrawer(
         user: user,

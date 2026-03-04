@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/providers/create_user_provider.dart';
+import '../../auth/providers/current_congregation_provider.dart';
 import '../../auth/models/user_model.dart';
 import '../data/mock_user_repository.dart';
 import '../providers/users_provider.dart';
@@ -28,6 +29,7 @@ class _CreateUserScreenState extends ConsumerState<CreateUserScreen> {
   final _passwordController = TextEditingController();
   UserRole _role = UserRole.conductor;
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -47,18 +49,22 @@ class _CreateUserScreenState extends ConsumerState<CreateUserScreen> {
 
       if (useCloudFunction) {
         final service = ref.read(createUserServiceProvider);
+        final congregationId = ref.read(currentCongregationProvider);
         await service.createUser(
           name: _nameController.text.trim(),
           email: _emailController.text.trim(),
           password: _passwordController.text,
           role: _role,
+          congregationId: congregationId,
         );
       } else {
         final repo = ref.read(userRepositoryProvider);
+        final congregationId = ref.read(currentCongregationProvider);
         await repo.createUser(
           name: _nameController.text.trim(),
           email: _emailController.text.trim(),
           role: _role,
+          congregationId: congregationId,
         );
       }
 
@@ -129,10 +135,19 @@ class _CreateUserScreenState extends ConsumerState<CreateUserScreen> {
                       const SizedBox(height: AppSpacing.md),
                       TextFormField(
                         controller: _passwordController,
-                        obscureText: true,
-                        decoration: const InputDecoration(
+                        obscureText: _obscurePassword,
+                        decoration: InputDecoration(
                           labelText: 'Senha',
                           hintText: 'Mínimo 6 caracteres',
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                            onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword),
+                          ),
                         ),
                         validator: (v) {
                           if (v == null || v.isEmpty) return 'Obrigatório';

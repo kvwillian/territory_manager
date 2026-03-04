@@ -41,7 +41,13 @@ class MockUserRepository implements UserRepository {
     String? congregationId,
   }) async {
     final id = 'u${DateTime.now().millisecondsSinceEpoch}';
-    final user = UserModel(id: id, name: name, role: role, email: email);
+    final user = UserModel(
+      id: id,
+      name: name,
+      role: role,
+      email: email,
+      congregationId: congregationId,
+    );
     _users.add(user);
     return user;
   }

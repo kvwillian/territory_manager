@@ -27,7 +27,6 @@ final preachingSessionRepositoryProvider =
           ref.watch(currentCongregationProvider),
         ),
         local: LocalRepository(db),
-        syncService: ref.watch(offlineSyncServiceProvider),
         connectivity: ConnectivityService(),
         onInvalidate: () {},
         congregationId: ref.watch(currentCongregationProvider),

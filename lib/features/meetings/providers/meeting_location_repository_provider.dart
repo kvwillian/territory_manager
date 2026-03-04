@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/local_repository.dart';
 import '../../../core/providers/invalidation_callbacks.dart';
-import '../../../core/services/connectivity_service.dart';
 import '../../../core/services/offline_sync_service.dart';
+import '../../../core/services/connectivity_service.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../auth/providers/current_congregation_provider.dart';
 import '../models/meeting_location_model.dart';
@@ -38,9 +38,9 @@ final meetingLocationRepositoryProvider =
           ref.watch(currentCongregationProvider),
         ),
         local: LocalRepository(db),
-        syncService: ref.watch(offlineSyncServiceProvider),
         connectivity: ConnectivityService(),
         onInvalidate: () => invalidateMeetingLocations?.call(),
+        onReadFromCache: () => ref.read(offlineSyncServiceProvider).refreshFromFirestore().then((_) => invalidateMeetingLocations?.call()),
         congregationId: ref.watch(currentCongregationProvider),
       );
     }

@@ -11,6 +11,7 @@ interface CreateUserRequest {
   password: string;
   name: string;
   role: "admin" | "conductor";
+  congregationId?: string;
 }
 
 /**
@@ -31,7 +32,11 @@ export const createUser = functions.https.onCall(async (data: CreateUserRequest,
     throw new functions.https.HttpsError("permission-denied", "Only admins can create users");
   }
 
-  const congregationId = callerDoc.data()?.congregationId ?? DEFAULT_CONGREGATION_ID;
+  // Prefer congregationId from client (admin's current congregation), fallback to admin's doc
+  const congregationId =
+    (data.congregationId && data.congregationId.trim() !== "")
+      ? data.congregationId.trim()
+      : (callerDoc.data()?.congregationId ?? DEFAULT_CONGREGATION_ID);
 
   const { email, password, name, role } = data;
   if (!email || !password || !name || !role) {
@@ -69,3 +74,53 @@ export const createUser = functions.https.onCall(async (data: CreateUserRequest,
     throw new functions.https.HttpsError("internal", message);
   }
 });
+
+/**
+ * Callable function: resets a user's password (admin only).
+ * Caller must be authenticated and have admin role.
+ */
+export const resetUserPassword = functions.https.onCall(
+  async (data: { uid: string; newPassword: string }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "Must be logged in"
+      );
+    }
+
+    const callerUid = context.auth.uid;
+    const callerDoc = await admin
+      .firestore()
+      .collection(USERS_COLLECTION)
+      .doc(callerUid)
+      .get();
+    if (!callerDoc.exists || callerDoc.data()?.role !== "admin") {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only admins can reset passwords"
+      );
+    }
+
+    const { uid, newPassword } = data;
+    if (!uid || !newPassword) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Missing uid or newPassword"
+      );
+    }
+    if (newPassword.length < 6) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Senha deve ter pelo menos 6 caracteres"
+      );
+    }
+
+    try {
+      await admin.auth().updateUser(uid, { password: newPassword });
+      return { success: true };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new functions.https.HttpsError("internal", message);
+    }
+  }
+);

@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/constants/congregation_constants.dart';
 import '../../../core/database/local_repository.dart';
-import '../../../core/services/offline_sync_service.dart';
 import '../../../core/services/connectivity_service.dart';
 import '../models/preaching_session_model.dart';
 import 'preaching_session_repository.dart';
@@ -12,17 +11,18 @@ class OfflinePreachingSessionRepository implements PreachingSessionRepository {
   OfflinePreachingSessionRepository({
     required this.remote,
     required this.local,
-    required this.syncService,
     required this.connectivity,
     required this.onInvalidate,
+    this.onReadFromCache,
     this.congregationId,
   });
 
   final PreachingSessionRepository remote;
   final LocalRepository local;
-  final OfflineSyncService syncService;
   final ConnectivityService connectivity;
   final VoidCallback onInvalidate;
+  /// Called when returning cached data; used to trigger background refresh.
+  final VoidCallback? onReadFromCache;
   final String? congregationId;
 
   String get _cid => congregationId ?? defaultCongregationId;
@@ -34,7 +34,7 @@ class OfflinePreachingSessionRepository implements PreachingSessionRepository {
     final hasCached = await local.hasCachedData();
     if (hasCached) {
       final maps = await local.getPreachingSessions(_cid);
-      syncService.refreshFromFirestore().then((_) => onInvalidate());
+      onReadFromCache?.call();
       return maps.map((m) => PreachingSessionModel.fromMap(m)).toList();
     }
 
