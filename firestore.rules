@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper: get current user's congregationId from users collection
+    function userCongregationId() {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc.data != null && userDoc.data.congregationId != null
+        ? userDoc.data.congregationId
+        : 'default';
+    }
+
+    // Helper: resource belongs to user's congregation (or has no congregationId for backward compat)
+    function resourceInUserCongregation(resource) {
+      let resourceCid = resource.data.congregationId != null
+        ? resource.data.congregationId
+        : 'default';
+      return resourceCid == userCongregationId();
+    }
+
+    match /congregations/{congregationId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    match /territories/{territoryId} {
+      allow read, update, delete: if request.auth != null
+        && resourceInUserCongregation(resource);
+      allow create: if request.auth != null
+        && (request.resource.data.congregationId == userCongregationId()
+            || request.resource.data.congregationId == null);
+    }
+
+    match /segments/{segmentId} {
+      allow read, update, delete: if request.auth != null
+        && resourceInUserCongregation(resource);
+      allow create: if request.auth != null
+        && (request.resource.data.congregationId == userCongregationId()
+            || request.resource.data.congregationId == null);
+    }
+
+    match /users/{userId} {
+      allow read: if request.auth != null
+        && (userId == request.auth.uid
+            || resource.data.congregationId == userCongregationId()
+            || (resource.data.congregationId == null && userCongregationId() == 'default'));
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null
+        && (userId == request.auth.uid
+            || resourceInUserCongregation(resource));
+    }
+
+    match /assignments/{assignmentId} {
+      allow read, update, delete: if request.auth != null
+        && resourceInUserCongregation(resource);
+      allow create: if request.auth != null
+        && (request.resource.data.congregationId == userCongregationId()
+            || request.resource.data.congregationId == null);
+    }
+
+    match /workSessions/{sessionId} {
+      allow read, update, delete: if request.auth != null
+        && resourceInUserCongregation(resource);
+      allow create: if request.auth != null
+        && (request.resource.data.congregationId == userCongregationId()
+            || request.resource.data.congregationId == null);
+    }
+
+    match /neighborhoods/{neighborhoodId} {
+      allow read, update, delete: if request.auth != null
+        && resourceInUserCongregation(resource);
+      allow create: if request.auth != null
+        && (request.resource.data.congregationId == userCongregationId()
+            || request.resource.data.congregationId == null);
+    }
+
+    match /meetingLocations/{locationId} {
+      allow read, update, delete: if request.auth != null
+        && resourceInUserCongregation(resource);
+      allow create: if request.auth != null
+        && (request.resource.data.congregationId == userCongregationId()
+            || request.resource.data.congregationId == null);
+    }
+
+    match /groups/{groupId} {
+      allow read, update, delete: if request.auth != null
+        && resourceInUserCongregation(resource);
+      allow create: if request.auth != null
+        && (request.resource.data.congregationId == userCongregationId()
+            || request.resource.data.congregationId == null);
+    }
+
+    match /preachingSessions/{sessionId} {
+      allow read, update, delete: if request.auth != null
+        && resourceInUserCongregation(resource);
+      allow create: if request.auth != null
+        && (request.resource.data.congregationId == userCongregationId()
+            || request.resource.data.congregationId == null);
+    }
+  }
+}

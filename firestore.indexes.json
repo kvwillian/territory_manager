@@ -1,0 +1,70 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "segments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "territoryId", "order": "ASCENDING" },
+        { "fieldPath": "congregationId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "segments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "territoryId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "segments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "territoryId", "order": "ASCENDING" },
+        { "fieldPath": "lastWorkedDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "workSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "congregationId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "workSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "territoryId", "order": "ASCENDING" },
+        { "fieldPath": "congregationId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "workSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "territoryId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "neighborhoods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "congregationId", "order": "ASCENDING" },
+        { "fieldPath": "name", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "preachingSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "meetingLocationId", "order": "ASCENDING" },
+        { "fieldPath": "congregationId", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
