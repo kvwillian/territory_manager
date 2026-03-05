@@ -194,7 +194,9 @@ class _ResetPasswordDialogState extends State<_ResetPasswordDialog> {
       );
       if (mounted) widget.onSuccess();
     } on FirebaseFunctionsException catch (e) {
-      if (mounted) widget.onError(e.message ?? 'Erro ao alterar senha');
+      if (mounted) {
+        widget.onError(_resetPasswordErrorMessage(e.code, e.message));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -276,6 +278,16 @@ class _ResetPasswordDialogState extends State<_ResetPasswordDialog> {
         ),
       ],
     );
+  }
+
+  String _resetPasswordErrorMessage(String code, String? message) {
+    return switch (code) {
+      'not-found' => 'Usuário não encontrado no Firebase Auth. Este usuário pode ter sido criado sem conta de login.',
+      'invalid-argument' => message ?? 'Dados inválidos. A senha deve ter pelo menos 6 caracteres.',
+      'permission-denied' => 'Sem permissão para alterar senha.',
+      'unauthenticated' => 'Faça login novamente.',
+      _ => message ?? 'Erro ao alterar senha. Tente novamente.',
+    };
   }
 }
 

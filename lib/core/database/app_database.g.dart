@@ -1364,6 +1364,333 @@ class PreachingSessionsCompanion extends UpdateCompanion<PreachingSession> {
   }
 }
 
+class $AssignmentsTable extends Assignments
+    with TableInfo<$AssignmentsTable, Assignment> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AssignmentsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _congregationIdMeta = const VerificationMeta(
+    'congregationId',
+  );
+  @override
+  late final GeneratedColumn<String> congregationId = GeneratedColumn<String>(
+    'congregation_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _jsonMeta = const VerificationMeta('json');
+  @override
+  late final GeneratedColumn<String> json = GeneratedColumn<String>(
+    'json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    congregationId,
+    json,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'assignments';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Assignment> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('congregation_id')) {
+      context.handle(
+        _congregationIdMeta,
+        congregationId.isAcceptableOrUnknown(
+          data['congregation_id']!,
+          _congregationIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('json')) {
+      context.handle(
+        _jsonMeta,
+        json.isAcceptableOrUnknown(data['json']!, _jsonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_jsonMeta);
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_lastUpdatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Assignment map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Assignment(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      congregationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}congregation_id'],
+      ),
+      json: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}json'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $AssignmentsTable createAlias(String alias) {
+    return $AssignmentsTable(attachedDatabase, alias);
+  }
+}
+
+class Assignment extends DataClass implements Insertable<Assignment> {
+  final String id;
+  final String? congregationId;
+  final String json;
+  final DateTime lastUpdatedAt;
+  const Assignment({
+    required this.id,
+    this.congregationId,
+    required this.json,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    if (!nullToAbsent || congregationId != null) {
+      map['congregation_id'] = Variable<String>(congregationId);
+    }
+    map['json'] = Variable<String>(json);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  AssignmentsCompanion toCompanion(bool nullToAbsent) {
+    return AssignmentsCompanion(
+      id: Value(id),
+      congregationId: congregationId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(congregationId),
+      json: Value(json),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory Assignment.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Assignment(
+      id: serializer.fromJson<String>(json['id']),
+      congregationId: serializer.fromJson<String?>(json['congregationId']),
+      json: serializer.fromJson<String>(json['json']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'congregationId': serializer.toJson<String?>(congregationId),
+      'json': serializer.toJson<String>(json),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  Assignment copyWith({
+    String? id,
+    Value<String?> congregationId = const Value.absent(),
+    String? json,
+    DateTime? lastUpdatedAt,
+  }) => Assignment(
+    id: id ?? this.id,
+    congregationId: congregationId.present
+        ? congregationId.value
+        : this.congregationId,
+    json: json ?? this.json,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  Assignment copyWithCompanion(AssignmentsCompanion data) {
+    return Assignment(
+      id: data.id.present ? data.id.value : this.id,
+      congregationId: data.congregationId.present
+          ? data.congregationId.value
+          : this.congregationId,
+      json: data.json.present ? data.json.value : this.json,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Assignment(')
+          ..write('id: $id, ')
+          ..write('congregationId: $congregationId, ')
+          ..write('json: $json, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, congregationId, json, lastUpdatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Assignment &&
+          other.id == this.id &&
+          other.congregationId == this.congregationId &&
+          other.json == this.json &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class AssignmentsCompanion extends UpdateCompanion<Assignment> {
+  final Value<String> id;
+  final Value<String?> congregationId;
+  final Value<String> json;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const AssignmentsCompanion({
+    this.id = const Value.absent(),
+    this.congregationId = const Value.absent(),
+    this.json = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AssignmentsCompanion.insert({
+    required String id,
+    this.congregationId = const Value.absent(),
+    required String json,
+    required DateTime lastUpdatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       json = Value(json),
+       lastUpdatedAt = Value(lastUpdatedAt);
+  static Insertable<Assignment> custom({
+    Expression<String>? id,
+    Expression<String>? congregationId,
+    Expression<String>? json,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (congregationId != null) 'congregation_id': congregationId,
+      if (json != null) 'json': json,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AssignmentsCompanion copyWith({
+    Value<String>? id,
+    Value<String?>? congregationId,
+    Value<String>? json,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return AssignmentsCompanion(
+      id: id ?? this.id,
+      congregationId: congregationId ?? this.congregationId,
+      json: json ?? this.json,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (congregationId.present) {
+      map['congregation_id'] = Variable<String>(congregationId.value);
+    }
+    if (json.present) {
+      map['json'] = Variable<String>(json.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AssignmentsCompanion(')
+          ..write('id: $id, ')
+          ..write('congregationId: $congregationId, ')
+          ..write('json: $json, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $SyncQueueTable extends SyncQueue
     with TableInfo<$SyncQueueTable, SyncQueueData> {
   @override
@@ -1679,6 +2006,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $PreachingSessionsTable preachingSessions =
       $PreachingSessionsTable(this);
+  late final $AssignmentsTable assignments = $AssignmentsTable(this);
   late final $SyncQueueTable syncQueue = $SyncQueueTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -1689,6 +2017,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     segments,
     meetingLocations,
     preachingSessions,
+    assignments,
     syncQueue,
   ];
 }
@@ -2464,6 +2793,191 @@ typedef $$PreachingSessionsTableProcessedTableManager =
       PreachingSession,
       PrefetchHooks Function()
     >;
+typedef $$AssignmentsTableCreateCompanionBuilder =
+    AssignmentsCompanion Function({
+      required String id,
+      Value<String?> congregationId,
+      required String json,
+      required DateTime lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$AssignmentsTableUpdateCompanionBuilder =
+    AssignmentsCompanion Function({
+      Value<String> id,
+      Value<String?> congregationId,
+      Value<String> json,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+class $$AssignmentsTableFilterComposer
+    extends Composer<_$AppDatabase, $AssignmentsTable> {
+  $$AssignmentsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get congregationId => $composableBuilder(
+    column: $table.congregationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get json => $composableBuilder(
+    column: $table.json,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AssignmentsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AssignmentsTable> {
+  $$AssignmentsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get congregationId => $composableBuilder(
+    column: $table.congregationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get json => $composableBuilder(
+    column: $table.json,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AssignmentsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AssignmentsTable> {
+  $$AssignmentsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get congregationId => $composableBuilder(
+    column: $table.congregationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get json =>
+      $composableBuilder(column: $table.json, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$AssignmentsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AssignmentsTable,
+          Assignment,
+          $$AssignmentsTableFilterComposer,
+          $$AssignmentsTableOrderingComposer,
+          $$AssignmentsTableAnnotationComposer,
+          $$AssignmentsTableCreateCompanionBuilder,
+          $$AssignmentsTableUpdateCompanionBuilder,
+          (
+            Assignment,
+            BaseReferences<_$AppDatabase, $AssignmentsTable, Assignment>,
+          ),
+          Assignment,
+          PrefetchHooks Function()
+        > {
+  $$AssignmentsTableTableManager(_$AppDatabase db, $AssignmentsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AssignmentsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AssignmentsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AssignmentsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String?> congregationId = const Value.absent(),
+                Value<String> json = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AssignmentsCompanion(
+                id: id,
+                congregationId: congregationId,
+                json: json,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                Value<String?> congregationId = const Value.absent(),
+                required String json,
+                required DateTime lastUpdatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => AssignmentsCompanion.insert(
+                id: id,
+                congregationId: congregationId,
+                json: json,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AssignmentsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AssignmentsTable,
+      Assignment,
+      $$AssignmentsTableFilterComposer,
+      $$AssignmentsTableOrderingComposer,
+      $$AssignmentsTableAnnotationComposer,
+      $$AssignmentsTableCreateCompanionBuilder,
+      $$AssignmentsTableUpdateCompanionBuilder,
+      (
+        Assignment,
+        BaseReferences<_$AppDatabase, $AssignmentsTable, Assignment>,
+      ),
+      Assignment,
+      PrefetchHooks Function()
+    >;
 typedef $$SyncQueueTableCreateCompanionBuilder =
     SyncQueueCompanion Function({
       Value<int> id,
@@ -2653,6 +3167,8 @@ class $AppDatabaseManager {
       $$MeetingLocationsTableTableManager(_db, _db.meetingLocations);
   $$PreachingSessionsTableTableManager get preachingSessions =>
       $$PreachingSessionsTableTableManager(_db, _db.preachingSessions);
+  $$AssignmentsTableTableManager get assignments =>
+      $$AssignmentsTableTableManager(_db, _db.assignments);
   $$SyncQueueTableTableManager get syncQueue =>
       $$SyncQueueTableTableManager(_db, _db.syncQueue);
 }

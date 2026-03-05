@@ -209,6 +209,49 @@ class LocalRepository {
     await (_db.delete(_db.preachingSessions)..where((p) => p.id.equals(id))).go();
   }
 
+  // ---- Assignments ----
+  Future<void> upsertAssignments(List<Map<String, dynamic>> items) async {
+    if (items.isEmpty) return;
+    final now = DateTime.now();
+    await _db.batch((batch) {
+      for (final item in items) {
+        final id = item['id'] as String? ?? '';
+        if (id.isEmpty) continue;
+        final congregationId = item['congregationId'] as String?;
+        final jsonStr = jsonEncode(item);
+        batch.insert(
+          _db.assignments,
+          AssignmentsCompanion.insert(
+            id: id,
+            congregationId: Value(congregationId),
+            json: jsonStr,
+            lastUpdatedAt: now,
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getAssignments(String? congregationId) async {
+    var query = _db.select(_db.assignments);
+    if (congregationId != null && congregationId.isNotEmpty) {
+      query = query..where((a) => a.congregationId.equals(congregationId));
+    }
+    final rows = await query.get();
+    return rows.map((r) => jsonDecode(r.json) as Map<String, dynamic>).toList();
+  }
+
+  Future<Map<String, dynamic>?> getAssignmentById(String id) async {
+    final row = await (_db.select(_db.assignments)..where((a) => a.id.equals(id)))
+        .getSingleOrNull();
+    return row != null ? jsonDecode(row.json) as Map<String, dynamic> : null;
+  }
+
+  Future<void> deleteAssignment(String id) async {
+    await (_db.delete(_db.assignments)..where((a) => a.id.equals(id))).go();
+  }
+
   // ---- Sync Queue ----
   Future<void> enqueueSyncItem({
     required String operationType,
@@ -256,6 +299,7 @@ class LocalRepository {
     await _db.delete(_db.segments).go();
     await _db.delete(_db.meetingLocations).go();
     await _db.delete(_db.preachingSessions).go();
+    await _db.delete(_db.assignments).go();
   }
 }
 

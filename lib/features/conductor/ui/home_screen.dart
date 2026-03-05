@@ -8,8 +8,9 @@ import '../../auth/providers/auth_provider.dart';
 import '../../auth/models/user_model.dart';
 import '../../meetings/models/meeting_location_model.dart';
 import '../../territories/models/territory_model.dart';
+import '../../admin/providers/assignments_provider.dart';
 import '../../admin/providers/territories_provider.dart';
-import '../providers/mock_data_provider.dart';
+import '../../meetings/providers/meeting_location_repository_provider.dart';
 import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/cached_territory_image.dart';
 import '../../../../shared/widgets/progress_indicator_bar.dart';
@@ -22,9 +23,9 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateProvider);
-    final assignment = ref.watch(mockTodayAssignmentProvider);
+    final assignmentAsync = ref.watch(todayAssignmentForConductorProvider);
     final territories = ref.watch(territoriesProvider);
-    final meetingLocations = ref.watch(mockMeetingLocationsProvider);
+    final meetingLocations = ref.watch(meetingLocationsProvider);
 
     if (authState is! AuthAuthenticated) {
       return const Scaffold(
@@ -32,7 +33,7 @@ class HomeScreen extends ConsumerWidget {
       );
     }
 
-    if (territories.isLoading) {
+    if (territories.isLoading || assignmentAsync.isLoading) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
@@ -41,12 +42,30 @@ class HomeScreen extends ConsumerWidget {
     final user = authState.user;
     final territoryList =
         territories.hasValue ? territories.value! : [];
-    final territory = assignment != null
-        ? territoryList.where((t) => t.id == assignment.territoryId).firstOrNull
-        : null;
-    final meetingLocation = meetingLocations.isNotEmpty
-        ? meetingLocations.first
-        : null;
+    final assignment = assignmentAsync.whenOrNull(data: (a) => a);
+    final ids = assignment?.allTerritoryIds ?? [];
+    final firstTerritoryId = ids.isNotEmpty ? ids.first : null;
+    TerritoryModel? territory;
+    if (firstTerritoryId != null) {
+      try {
+        territory =
+            territoryList.firstWhere((t) => t.id == firstTerritoryId);
+      } catch (_) {
+        territory = null;
+      }
+    }
+    final locationList = meetingLocations.whenOrNull(data: (list) => list) ?? [];
+    MeetingLocationModel? meetingLocation;
+    if (assignment?.meetingLocationId != null) {
+      try {
+        meetingLocation = locationList
+            .firstWhere((l) => l.id == assignment!.meetingLocationId);
+      } catch (_) {
+        meetingLocation = locationList.isNotEmpty ? locationList.first : null;
+      }
+    } else {
+      meetingLocation = locationList.isNotEmpty ? locationList.first : null;
+    }
 
     return SafeArea(
         child: SingleChildScrollView(
@@ -64,7 +83,10 @@ class HomeScreen extends ConsumerWidget {
                 _TerritoryCard(territory: territory),
                 const SizedBox(height: AppSpacing.sectionSpacing),
                 FilledButton.icon(
-                  onPressed: () => context.push('/territory/${territory.id}'),
+                  onPressed: () {
+                    final t = territory!;
+                    context.push('/territory/${t.id}');
+                  },
                   icon: const Icon(Icons.map),
                   label: const Text('Abrir Território'),
                 ),

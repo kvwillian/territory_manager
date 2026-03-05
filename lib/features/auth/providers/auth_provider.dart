@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/congregation_constants.dart';
@@ -46,29 +47,65 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
-  /// Fetches user profile from Firestore (name, role). Falls back to Auth data if not found.
+  /// Fetches user profile from Firestore (name, role).
+  /// Retries when doc doesn't exist yet (e.g. right after Cloud Function creates user).
+  /// Falls back to Auth data if not found after retries.
   Future<UserModel> _userFromFirebaseUser(User user) async {
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection(_usersCollection)
-          .doc(user.uid)
-          .get();
+    const maxAttempts = 5;
+    const delayMs = 500;
 
-      if (doc.exists && doc.data() != null) {
-        final data = doc.data()!;
-        return UserModel(
-          id: user.uid,
-          name: data['name'] as String? ?? user.displayName ?? user.email ?? 'Usuário',
-          email: data['email'] as String? ?? user.email,
-          role: UserRole.values.firstWhere(
-            (e) => e.name == data['role'],
-            orElse: () => UserRole.conductor,
-          ),
-          congregationId: data['congregationId'] as String? ?? defaultCongregationId,
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection(_usersCollection)
+            .doc(user.uid)
+            .get(const GetOptions(source: Source.server));
+
+        debugPrint(
+          'AuthProvider._userFromFirebaseUser attempt ${attempt + 1}/$maxAttempts: '
+          'doc.exists=${doc.exists}, data=${doc.data()}',
         );
+
+        if (doc.exists && doc.data() != null) {
+          final data = doc.data()!;
+          final cid = data['congregationId'] as String?;
+          debugPrint(
+            'AuthProvider: user doc found congregationId=$cid, full data=$data',
+          );
+          if (cid != null && cid.isNotEmpty) {
+            await user.getIdToken(true);
+            debugPrint('AuthProvider: token refreshed after user doc confirmed');
+            return UserModel(
+              id: user.uid,
+              name: data['name'] as String? ?? user.displayName ?? user.email ?? 'Usuário',
+              email: data['email'] as String? ?? user.email,
+              role: UserRole.values.firstWhere(
+                (e) => e.name == data['role'],
+                orElse: () => UserRole.conductor,
+              ),
+              congregationId: cid,
+            );
+          }
+          await user.getIdToken(true);
+          debugPrint('AuthProvider: token refreshed (user doc has no congregationId)');
+          return UserModel(
+            id: user.uid,
+            name: data['name'] as String? ?? user.displayName ?? user.email ?? 'Usuário',
+            email: data['email'] as String? ?? user.email,
+            role: UserRole.values.firstWhere(
+              (e) => e.name == data['role'],
+              orElse: () => UserRole.conductor,
+            ),
+            congregationId: defaultCongregationId,
+          );
+        }
+      } catch (e, st) {
+        debugPrint('AuthProvider._userFromFirebaseUser attempt ${attempt + 1} error: $e\n$st');
+        // Fall through to retry or fallback
       }
-    } catch (_) {
-      // Firestore read failed, use Auth data
+      if (attempt < maxAttempts - 1) {
+        await Future<void>.delayed(Duration(milliseconds: delayMs));
+      }
     }
     return UserModel(
       id: user.uid,

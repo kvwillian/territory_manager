@@ -9,7 +9,7 @@ The algorithm must consider operational constraints and prioritize territories t
 - are geographically close to the meeting location
 - contain unfinished segments
 - have not been worked recently
-- were not assigned to the same group recently
+- were not assigned to the same preaching session / meeting location recently
 
 The algorithm must always prioritize **practicality for the field service arrangement**.
 
@@ -20,7 +20,7 @@ The algorithm must always prioritize **practicality for the field service arrang
 The system should:
 
 1. Suggest territories near the meeting location
-2. Avoid assigning the same territory to the same group in consecutive weeks
+2. Avoid assigning the same territory to the same preaching session in consecutive weeks
 3. Prefer finishing partially completed territories
 4. Avoid leaving territories partially covered indefinitely
 5. Balance territory coverage across the congregation area
@@ -71,11 +71,11 @@ This allows administrators to manually constrain possible areas.
 
 ## Step 3 – Rotation Rule
 
-The same group should not receive the same territory in consecutive weeks.
+The same preaching session should not receive the same territory in consecutive weeks.
 
 Algorithm rule:
 
-if territory was assigned to group within last 7 days
+if territory was assigned to this preaching session within last 7 days
 
 apply **heavy penalty or exclusion**.
 
@@ -170,17 +170,17 @@ Weights should be configurable in the future.
 
 # Weekly Assignment Generation
 
-Assignments are generated per session.
+Assignments are generated per PreachingSession.
 
-A session represents:
+A preaching session represents:
 
-- a specific date
-- a group
+- a specific day of week
 - a meeting location
+- conductor(s)
 
 Example:
 
-Thursday evening group  
+Thursday evening  
 Meeting point: Sister Gloria house
 
 ---
@@ -242,7 +242,7 @@ This territory should receive higher priority than a completely untouched territ
 
 # Conflict Prevention
 
-When generating multiple assignments (example Sunday groups), the system must avoid assigning overlapping or extremely close territories.
+When generating multiple assignments (e.g. multiple Sunday preaching sessions), the system must avoid assigning overlapping or extremely close territories.
 
 Recommended rule:
 
@@ -252,7 +252,7 @@ Example:
 
 minimumDistanceBetweenTerritories = 300 meters
 
-This prevents groups from accidentally covering the same streets.
+This prevents sessions from accidentally covering the same streets.
 
 ---
 

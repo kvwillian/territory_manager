@@ -218,18 +218,14 @@ MeetingLocation
 - radiusMeters
 - allowedTerritories
 
-Group
-
-- id
-- name
-- meetingLocationId
-
 Assignment
 
 - id
 - date
-- groupId
-- territoryId
+- conductorId
+- meetingLocationId
+- territoryIds[]
+- preachingSessionId (optional)
 
 WorkSession
 

@@ -2,3 +2,4 @@
 /// Used to avoid circular dependencies between repository and data providers.
 void Function()? invalidateTerritories;
 void Function()? invalidateMeetingLocations;
+void Function()? invalidateAssignments;

@@ -198,15 +198,17 @@ Handles territory assignments for preaching sessions.
 
 Responsibilities:
 
-- generate weekly assignments
+- generate weekly assignments (based on PreachingSession)
 - store assignment history
 - enforce territory rotation rules
 
 Assignments include:
 
 date  
-groupId  
-territoryId
+conductorId  
+meetingLocationId  
+territoryIds[]  
+preachingSessionId (optional)
 
 ---
 
@@ -218,7 +220,7 @@ Filtering:
 
 1. territories within meeting radius
 2. territories allowed by configuration
-3. territories not recently assigned to same group
+3. territories not recently assigned to same meeting location / preaching session
 
 Scoring factors:
 
@@ -287,7 +289,7 @@ Reports may include:
 
 territory coverage reports  
 territory history reports  
-group assignment history  
+assignment history (by preaching session / meeting location)  
 segment completion statistics
 
 Exports should support:
@@ -367,7 +369,7 @@ territories
 streets  
 segments  
 meetingLocations  
-groups  
+preachingSessions  
 assignments  
 workSessions  
 auditLogs

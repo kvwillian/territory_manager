@@ -120,6 +120,21 @@ export const resetUserPassword = functions.https.onCall(
       return { success: true };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
+      const code = err && typeof err === "object" && "code" in err
+        ? (err as { code: string }).code
+        : "";
+      if (code === "auth/user-not-found" || message.includes("user-not-found")) {
+        throw new functions.https.HttpsError(
+          "not-found",
+          "Usuário não encontrado no Firebase Auth. Este usuário pode ter sido criado sem conta de login."
+        );
+      }
+      if (message.includes("password") || code === "auth/weak-password") {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Senha deve ter pelo menos 6 caracteres"
+        );
+      }
       throw new functions.https.HttpsError("internal", message);
     }
   }

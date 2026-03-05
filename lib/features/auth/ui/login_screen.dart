@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -49,6 +50,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ? '/admin'
             : '/home';
         context.go(path);
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = _authErrorMessage(e.code);
+          _isLoading = false;
+        });
       }
     } on Exception catch (e) {
       if (mounted) {
@@ -130,11 +138,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                       if (_errorMessage != null) ...[
                         const SizedBox(height: AppSpacing.md),
-                        Text(
-                          _errorMessage!,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        Container(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .errorContainer
+                                .withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Theme.of(context).colorScheme.error.withValues(
+                                    alpha: 0.5,
+                                  ),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.error_outline_rounded,
                                 color: Theme.of(context).colorScheme.error,
+                                size: 24,
                               ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Text(
+                                  _errorMessage!,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: Theme.of(context).colorScheme.onErrorContainer,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                       const SizedBox(height: AppSpacing.lg),
@@ -175,5 +213,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
       ),
     );
+  }
+
+  /// Maps Firebase Auth error codes to user-friendly Portuguese messages.
+  String _authErrorMessage(String code) {
+    return switch (code) {
+      'wrong-password' => 'Senha incorreta. Tente novamente.',
+      'invalid-credential' => 'E-mail ou senha incorretos. Verifique e tente novamente.',
+      'user-not-found' => 'Nenhuma conta encontrada com este e-mail.',
+      'invalid-email' => 'E-mail inválido. Verifique o formato.',
+      'user-disabled' => 'Esta conta foi desativada. Entre em contato com o administrador.',
+      'too-many-requests' => 'Muitas tentativas. Aguarde alguns minutos e tente novamente.',
+      'network-request-failed' => 'Sem conexão. Verifique sua internet e tente novamente.',
+      _ => 'Não foi possível entrar. Tente novamente.',
+    };
   }
 }

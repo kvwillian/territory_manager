@@ -48,6 +48,16 @@ class PreachingSessions extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+class Assignments extends Table {
+  TextColumn get id => text()();
+  TextColumn get congregationId => text().nullable()();
+  TextColumn get json => text()();
+  DateTimeColumn get lastUpdatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 class SyncQueue extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get operationType => text()();
@@ -60,13 +70,33 @@ class SyncQueue extends Table {
   Segments,
   MeetingLocations,
   PreachingSessions,
+  Assignments,
   SyncQueue,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration {
+    final db = this;
+    return MigrationStrategy(
+      onUpgrade: (migrator, from, to) async {
+        if (from < 2) {
+          // Create assignments table (matches Drift schema: id, congregation_id, json, last_updated_at)
+          await db.customStatement(
+            'CREATE TABLE IF NOT EXISTS assignments ('
+            'id TEXT NOT NULL PRIMARY KEY, '
+            'congregation_id TEXT, '
+            'json TEXT NOT NULL, '
+            'last_updated_at INTEGER NOT NULL)',
+          );
+        }
+      },
+    );
+  }
 
   static LazyDatabase _openConnection() {
     return LazyDatabase(() async {

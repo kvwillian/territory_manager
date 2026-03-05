@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 import '../constants/congregation_constants.dart';
+import '../../features/assignments/models/assignment_model.dart';
 import '../../features/assignments/models/work_session_model.dart';
 import '../../features/territories/models/segment_model.dart';
 import '../../features/territories/models/segment_status.dart';
@@ -74,5 +76,42 @@ class FirestoreSyncWriter {
       'notes': session.notes,
       'congregationId': session.congregationId ?? _cid,
     });
+  }
+
+  /// Creates an assignment in Firestore.
+  Future<void> createAssignment(AssignmentModel assignment) async {
+    final now = DateTime.now();
+    final payload = {
+      'date': Timestamp.fromDate(assignment.date),
+      'congregationId': assignment.congregationId ?? _cid,
+      'meetingLocationId': assignment.meetingLocationId,
+      'conductorId': assignment.conductorId,
+      'territoryIds': assignment.territoryIds,
+      'preachingSessionId': assignment.preachingSessionId,
+      'createdAt': Timestamp.fromDate(now),
+      'updatedAt': Timestamp.fromDate(now),
+    };
+    debugPrint('FirestoreSyncWriter.createAssignment payload: $payload');
+    final docRef = _firestore.collection('assignments').doc(assignment.id);
+    await docRef.set(payload);
+  }
+
+  /// Updates an assignment in Firestore.
+  Future<void> updateAssignment(AssignmentModel assignment) async {
+    final docRef = _firestore.collection('assignments').doc(assignment.id);
+    await docRef.update({
+      'date': Timestamp.fromDate(assignment.date),
+      'congregationId': assignment.congregationId ?? _cid,
+      'meetingLocationId': assignment.meetingLocationId,
+      'conductorId': assignment.conductorId,
+      'territoryIds': assignment.territoryIds,
+      'preachingSessionId': assignment.preachingSessionId,
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
+    });
+  }
+
+  /// Deletes an assignment from Firestore.
+  Future<void> deleteAssignment(String id) async {
+    await _firestore.collection('assignments').doc(id).delete();
   }
 }

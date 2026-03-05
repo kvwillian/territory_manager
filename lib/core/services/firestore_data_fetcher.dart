@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart' show FirebaseException;
+import 'package:flutter/foundation.dart';
 
 import '../constants/congregation_constants.dart';
+import '../../features/assignments/models/assignment_model.dart';
 import '../../features/territories/models/segment_status.dart';
 import '../../features/meetings/models/meeting_location_model.dart';
 import '../../features/meetings/models/preaching_session_model.dart';
@@ -55,6 +58,58 @@ class FirestoreDataFetcher {
         .where('congregationId', isEqualTo: _cid)
         .get();
     return snapshot.docs.map(_docToPreachingSession).toList();
+  }
+
+  Future<List<AssignmentModel>> fetchAssignments() async {
+    return _fetchAssignmentsWithRetry(0);
+  }
+
+  Future<List<AssignmentModel>> _fetchAssignmentsWithRetry(int attempt) async {
+    const maxRetries = 4;
+    const retryDelayMs = 600;
+    try {
+      debugPrint('FirestoreDataFetcher.fetchAssignments: _cid=$_cid');
+      final snapshot = await _firestore
+          .collection('assignments')
+          .where('congregationId', isEqualTo: _cid)
+          .get();
+      return snapshot.docs.map(_docToAssignment).toList();
+    } catch (e, st) {
+      final isPermissionDenied = e.toString().contains('permission-denied') ||
+          (e is FirebaseException && e.code == 'permission-denied');
+      if (isPermissionDenied && attempt < maxRetries) {
+        debugPrint(
+          'FirestoreDataFetcher.fetchAssignments: PERMISSION_DENIED '
+          '(attempt ${attempt + 1}/$maxRetries), retrying - user doc may be propagating',
+        );
+        await Future<void>.delayed(Duration(milliseconds: retryDelayMs));
+        return _fetchAssignmentsWithRetry(attempt + 1);
+      }
+      debugPrint('FirestoreDataFetcher.fetchAssignments error: $e\n$st');
+      rethrow;
+    }
+  }
+
+  AssignmentModel _docToAssignment(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data()!;
+    final date = data['date'];
+    final dateTime = date is Timestamp
+        ? date.toDate()
+        : DateTime.tryParse(date as String? ?? '') ?? DateTime.now();
+    final territoryIdsRaw = data['territoryIds'];
+    final territoryIds = territoryIdsRaw != null
+        ? (territoryIdsRaw as List<dynamic>).map((e) => e as String).toList()
+        : <String>[];
+    return AssignmentModel(
+      id: doc.id,
+      date: dateTime,
+      territoryId: data['territoryId'] as String?,
+      conductorId: data['conductorId'] as String?,
+      meetingLocationId: data['meetingLocationId'] as String?,
+      territoryIds: territoryIds,
+      preachingSessionId: data['preachingSessionId'] as String?,
+      congregationId: data['congregationId'] as String? ?? defaultCongregationId,
+    );
   }
 
   TerritoryModel _docToTerritory(DocumentSnapshot<Map<String, dynamic>> doc) {

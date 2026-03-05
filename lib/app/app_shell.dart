@@ -8,6 +8,7 @@ import '../core/constants/app_colors.dart';
 import '../core/constants/app_spacing.dart';
 import '../core/providers/territory_image_provider.dart';
 import '../shared/widgets/sync_status_chip.dart';
+import '../features/admin/providers/assignments_provider.dart';
 import '../features/admin/providers/territories_provider.dart';
 import '../features/meetings/providers/meeting_location_repository_provider.dart';
 import '../core/services/connectivity_service.dart';
@@ -84,22 +85,59 @@ class _AppShellState extends ConsumerState<AppShell> {
     return 'Gerenciador de Territórios';
   }
 
+  /// Returns the FAB for the current route. Null = no FAB.
+  /// Keeps FAB scoped to the correct screens (territories, meeting locations, bairros).
+  Widget? _fabForLocation(String location) {
+    if (location == '/admin' || location == '/admin/territories') {
+      return FloatingActionButton.extended(
+        onPressed: () => context.push('/admin/territories/create'),
+        icon: const Icon(Icons.add),
+        label: const Text('Novo território'),
+      );
+    }
+    if (location == '/admin/meeting-locations') {
+      return FloatingActionButton.extended(
+        onPressed: () => context.push('/admin/meeting-locations/create'),
+        icon: const Icon(Icons.add),
+        label: const Text('Novo local'),
+      );
+    }
+    if (location == '/admin/bairros') {
+      return FloatingActionButton.extended(
+        onPressed: () => context.push('/admin/bairros/create'),
+        icon: const Icon(Icons.add),
+        label: const Text('Novo bairro'),
+      );
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
     final config = ref.watch(shellConfigProvider);
     ref.watch(territoriesInvalidateSetupProvider);
     ref.watch(meetingLocationsInvalidateSetupProvider);
-    final location = widget.state.matchedLocation;
-    final title = config.title.isNotEmpty ? config.title : _titleForLocation(location);
+    ref.watch(assignmentsInvalidateSetupProvider);
+    final router = GoRouter.of(context);
+    // Listen to router so FAB updates when route changes (fixes stale FAB on nav)
+    return ListenableBuilder(
+      listenable: router.routerDelegate,
+      builder: (context, _) {
+        final location =
+            router.routerDelegate.state.matchedLocation;
+        final title = config.title.isNotEmpty
+            ? config.title
+            : _titleForLocation(location);
+        final fab = _fabForLocation(location);
 
-    if (authState is! AuthAuthenticated) {
-      return widget.child;
-    }
+        if (authState is! AuthAuthenticated) {
+          return widget.child;
+        }
 
-    final user = authState.user;
+        final user = authState.user;
 
-    return Scaffold(
+        return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
         title: Text(title),
@@ -119,7 +157,9 @@ class _AppShellState extends ConsumerState<AppShell> {
         onSignOut: () => ref.read(authStateProvider.notifier).signOut(),
       ),
       body: TerritoryImagePrefetcher(child: widget.child),
-      floatingActionButton: config.fab,
+      floatingActionButton: fab,
+        );
+      },
     );
   }
 }
