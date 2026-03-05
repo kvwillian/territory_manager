@@ -37,7 +37,9 @@ final assignmentRepositoryProvider = Provider<AssignmentRepository>((ref) {
         onReadFromCache: () => ref
             .read(offlineSyncServiceProvider)
             .refreshFromFirestore()
-            .then((_) => invalidateAssignments?.call()),
+            .then((didRefresh) {
+              if (didRefresh) invalidateAssignments?.call();
+            }),
         congregationId: ref.watch(currentCongregationProvider),
         ref: ref,
       );

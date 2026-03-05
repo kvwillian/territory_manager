@@ -164,6 +164,9 @@ class _DayAssignmentDialogState extends ConsumerState<DayAssignmentDialog> {
     await repo.saveAssignment(assignment);
     ref.invalidate(assignmentsProvider);
     ref.invalidate(assignmentsForWeekProvider);
+    ref.invalidate(nextAssignmentForConductorProvider);
+    ref.invalidate(conductorAssignmentForDateProvider);
+    ref.invalidate(conductorAssignmentDatesProvider);
     if (context.mounted) {
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(

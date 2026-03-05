@@ -24,11 +24,14 @@ class TerritoryProgressService {
 
   /// Saves progress: syncs segment statuses and creates work session.
   /// When offline: updates local cache and queues for sync when reconnected.
+  /// Set [skipInvalidate] true when called from home screen expanded card to avoid
+  /// full-screen loading, scroll reset, and dropdown collapse.
   Future<void> saveProgress({
     required String territoryId,
     required String conductorId,
     required Map<String, SegmentStatus> statusBySegmentId,
     String? notes,
+    bool skipInvalidate = false,
   }) async {
     final segmentRepo = _ref.read(segmentRepositoryProvider);
     final workSessionRepo = _ref.read(workSessionRepositoryProvider);
@@ -60,7 +63,7 @@ class TerritoryProgressService {
     if (online && db != null) {
       await segmentRepo.syncSegmentStatuses(territoryId, statusBySegmentId);
       await workSessionRepo.createWorkSession(workSession);
-      _ref.invalidate(territoriesProvider);
+      if (!skipInvalidate) _ref.invalidate(territoriesProvider);
       return;
     }
 
@@ -71,7 +74,7 @@ class TerritoryProgressService {
       await local.updateSegmentStatuses(territoryId, statusMap);
       await syncService.queueSyncSegmentStatuses(territoryId, statusBySegmentId);
       await syncService.queueCreateWorkSession(workSession);
-      _ref.invalidate(territoriesProvider);
+      if (!skipInvalidate) _ref.invalidate(territoriesProvider);
     }
   }
 }

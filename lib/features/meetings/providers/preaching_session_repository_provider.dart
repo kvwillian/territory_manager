@@ -12,6 +12,14 @@ import '../repositories/firestore_preaching_session_repository.dart';
 import '../repositories/offline_preaching_session_repository.dart';
 import '../repositories/preaching_session_repository.dart';
 
+/// Preaching session by ID. Returns null if id is null or not found.
+final preachingSessionByIdProvider =
+    FutureProvider.family<PreachingSessionModel?, String?>((ref, id) async {
+  if (id == null || id.isEmpty) return null;
+  final repo = ref.watch(preachingSessionRepositoryProvider);
+  return repo.getPreachingSessionById(id);
+});
+
 final preachingSessionRepositoryProvider =
     Provider<PreachingSessionRepository>((ref) {
   final authState = ref.watch(authStateProvider);

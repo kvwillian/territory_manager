@@ -40,7 +40,9 @@ final meetingLocationRepositoryProvider =
         local: LocalRepository(db),
         connectivity: ConnectivityService(),
         onInvalidate: () => invalidateMeetingLocations?.call(),
-        onReadFromCache: () => ref.read(offlineSyncServiceProvider).refreshFromFirestore().then((_) => invalidateMeetingLocations?.call()),
+        onReadFromCache: () => ref.read(offlineSyncServiceProvider).refreshFromFirestore().then((didRefresh) {
+          if (didRefresh) invalidateMeetingLocations?.call();
+        }),
         congregationId: ref.watch(currentCongregationProvider),
       );
     }

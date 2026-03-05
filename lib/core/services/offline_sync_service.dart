@@ -133,14 +133,15 @@ class OfflineSyncService {
   /// Refreshes local cache from Firestore in background.
   /// Does NOT call performInitialSync. Fetches data, updates local DB, invalidates.
   /// Throttled to run at most every 30 seconds.
-  Future<void> refreshFromFirestore() async {
-    if (kIsWeb || _local == null) return;
+  /// Returns true if a refresh was performed, false if skipped (throttled/offline).
+  Future<bool> refreshFromFirestore() async {
+    if (kIsWeb || _local == null) return false;
     final online = await _connectivity.isOnline;
-    if (!online) return;
-    if (_isSyncing) return;
+    if (!online) return false;
+    if (_isSyncing) return false;
     if (_lastRefreshTime != null &&
         DateTime.now().difference(_lastRefreshTime!) < _refreshThrottle) {
-      return;
+      return false;
     }
 
     _isSyncing = true;
@@ -178,9 +179,11 @@ class OfflineSyncService {
       await _updateSyncStatus();
       _lastRefreshTime = DateTime.now();
       debugPrint('OfflineSyncService: refreshFromFirestore finished');
+      return true;
     } catch (e) {
       debugPrint('OfflineSyncService.refreshFromFirestore error: $e');
       await _updateSyncStatus();
+      return false;
     } finally {
       _isSyncing = false;
     }

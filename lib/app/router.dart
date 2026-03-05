@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -23,13 +24,24 @@ import 'package:territory_manager/features/conductor/ui/history_screen.dart' as 
 import 'package:territory_manager/features/conductor/ui/territory_screen.dart';
 import 'package:territory_manager/shared/widgets/shell_route_config.dart';
 
+/// Notifier that triggers GoRouter redirect when auth state changes.
+/// Using refreshListenable avoids recreating the entire router on auth change,
+/// which was causing flickering between loading and dashboard.
+class _AuthRefreshNotifier extends ChangeNotifier {
+  _AuthRefreshNotifier(Ref ref) {
+    ref.listen(authStateProvider, (_, __) => notifyListeners());
+  }
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
+  final authRefresh = _AuthRefreshNotifier(ref);
 
   return GoRouter(
     initialLocation: '/login',
     debugLogDiagnostics: true,
+    refreshListenable: authRefresh,
     redirect: (context, state) {
+      final authState = ref.read(authStateProvider);
       final loc = state.matchedLocation;
       final isLoggingIn = loc == '/login';
 

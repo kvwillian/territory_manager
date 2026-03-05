@@ -103,10 +103,16 @@ class _TerritoryScreenContentState extends ConsumerState<_TerritoryScreenContent
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    CachedTerritoryImage(
-                      imageUrl: widget.territory.imageUrl,
-                      width: double.infinity,
-                      height: 180,
+                    GestureDetector(
+                      onTap: () => _showExpandedImage(
+                        context,
+                        widget.territory.imageUrl,
+                      ),
+                      child: CachedTerritoryImage(
+                        imageUrl: widget.territory.imageUrl,
+                        width: double.infinity,
+                        height: 180,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.md),
                     Text(
@@ -163,6 +169,44 @@ class _TerritoryScreenContentState extends ConsumerState<_TerritoryScreenContent
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
+  }
+
+  void _showExpandedImage(BuildContext context, String? url) {
+    if (url == null || url.trim().isEmpty) return;
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4,
+                child: SizedBox(
+                  width: MediaQuery.of(context).size.width - 48,
+                  height: MediaQuery.of(context).size.height - 96,
+                  child: CachedTerritoryImage(
+                    imageUrl: url,
+                    fit: BoxFit.contain,
+                    height: MediaQuery.of(context).size.height - 96,
+                    width: MediaQuery.of(context).size.width - 48,
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
