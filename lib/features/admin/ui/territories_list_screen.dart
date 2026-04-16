@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../meetings/models/meeting_location_model.dart';
 import '../../territories/models/territory_model.dart';
+import '../../territories/utils/neighborhood_territory_utils.dart';
 import '../providers/territories_provider.dart';
 import 'admin_shell.dart';
 import '../../../../shared/widgets/app_card.dart';
@@ -57,28 +58,6 @@ class TerritoriesListScreen extends ConsumerWidget {
       },
     );
   }
-}
-
-/// Groups territories by neighborhood. Returns map of neighborhood name -> territories.
-Map<String, List<TerritoryModel>> groupTerritoriesByNeighborhood(
-  List<TerritoryModel> territories,
-) {
-  final map = <String, List<TerritoryModel>>{};
-  for (final t in territories) {
-    final key = t.neighborhood;
-    map.putIfAbsent(key, () => []).add(t);
-  }
-  for (final list in map.values) {
-    list.sort((a, b) {
-      final na = a.number ?? a.name;
-      final nb = b.number ?? b.name;
-      return na.compareTo(nb);
-    });
-  }
-  final sortedKeys = map.keys.toList()..sort();
-  return Map.fromEntries(
-    sortedKeys.map((k) => MapEntry(k, map[k]!)),
-  );
 }
 
 class _NeighborhoodSection extends StatefulWidget {

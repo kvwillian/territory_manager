@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -31,6 +32,32 @@ class _AuthRefreshNotifier extends ChangeNotifier {
   _AuthRefreshNotifier(Ref ref) {
     ref.listen(authStateProvider, (_, __) => notifyListeners());
   }
+}
+
+/// When navigation uses [GoRouter.go], the Navigator stack may not pop.
+/// Maps the current shell route to its parent so system back goes up (e.g. Designações → Painel).
+String? _parentLocationForBack(String loc) {
+  if (loc.startsWith('/territory/')) return '/home';
+  if (loc == '/history') return '/home';
+  if (loc.startsWith('/admin/territories/edit/')) return '/admin/territories';
+  if (loc == '/admin/territories/create') return '/admin/territories';
+  if (loc == '/admin/territories') return '/admin';
+  if (loc.startsWith('/admin/bairros/edit/')) return '/admin/bairros';
+  if (loc == '/admin/bairros/create') return '/admin/bairros';
+  if (loc == '/admin/bairros') return '/admin';
+  if (loc.startsWith('/admin/meeting-locations/edit/')) {
+    return '/admin/meeting-locations';
+  }
+  if (loc == '/admin/meeting-locations/create') {
+    return '/admin/meeting-locations';
+  }
+  if (loc == '/admin/meeting-locations') return '/admin';
+  if (loc == '/admin/users/create') return '/admin/users';
+  if (loc == '/admin/users') return '/admin';
+  if (loc == '/admin/assignments') return '/admin';
+  if (loc == '/admin/history') return '/admin';
+  if (loc.startsWith('/admin/')) return '/admin';
+  return null;
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -88,7 +115,25 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           ShellRoute(
             builder: (context, state, child) {
-              return AppShell(state: state, child: child);
+              return PopScope(
+                canPop: false,
+                onPopInvokedWithResult: (didPop, result) {
+                  if (didPop) return;
+                  final router = GoRouter.of(context);
+                  if (router.canPop()) {
+                    router.pop();
+                    return;
+                  }
+                  final parent =
+                      _parentLocationForBack(router.state.matchedLocation);
+                  if (parent != null) {
+                    router.go(parent);
+                    return;
+                  }
+                  SystemNavigator.pop();
+                },
+                child: AppShell(state: state, child: child),
+              );
             },
             routes: [
               GoRoute(

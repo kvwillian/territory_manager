@@ -8,11 +8,11 @@ import '../../auth/models/user_model.dart';
 import '../../auth/providers/current_congregation_provider.dart';
 import '../../meetings/models/meeting_location_model.dart';
 import '../../territories/models/territory_model.dart';
+import '../../territories/utils/neighborhood_territory_utils.dart';
 import '../../assignments/providers/assignment_repository_provider.dart';
 import '../providers/assignments_provider.dart';
 import '../providers/territories_provider.dart';
 import '../providers/users_provider.dart';
-import 'territories_list_screen.dart';
 import '../../meetings/providers/meeting_location_repository_provider.dart';
 
 /// Dialog to manually assign conductor, meeting location, and territories for a day.
@@ -36,6 +36,8 @@ class _DayAssignmentDialogState extends ConsumerState<DayAssignmentDialog> {
   String? _conductorId;
   String? _meetingLocationId;
   final Set<String> _selectedTerritoryIds = {};
+  /// When true, lista todos os territórios (ignora o permitido no local de saída).
+  bool _allowOutsidePermittedRange = false;
 
   @override
   void initState() {
@@ -47,8 +49,72 @@ class _DayAssignmentDialogState extends ConsumerState<DayAssignmentDialog> {
     }
   }
 
+  void _pruneTerritoriesToAllowed(List<MeetingLocationModel> locations) {
+    if (_meetingLocationId == null) return;
+    final loc = _locationById(_meetingLocationId, locations);
+    if (loc == null) return;
+    if (_allowOutsidePermittedRange) return;
+
+    final allowed = loc.allowedTerritories.toSet();
+    final hasOutsideSelection =
+        _selectedTerritoryIds.any((id) => !allowed.contains(id));
+    if (hasOutsideSelection) {
+      setState(() => _allowOutsidePermittedRange = true);
+    }
+  }
+
+  void _onMeetingLocationChanged(
+    String? id,
+    List<MeetingLocationModel> locations,
+  ) {
+    setState(() {
+      _meetingLocationId = id;
+      if (id == null) {
+        _selectedTerritoryIds.clear();
+        return;
+      }
+      if (_allowOutsidePermittedRange) return;
+      final loc = _locationById(id, locations);
+      if (loc == null) return;
+      final allowed = loc.allowedTerritories.toSet();
+      _selectedTerritoryIds.removeWhere((tid) => !allowed.contains(tid));
+    });
+  }
+
+  void _onOutsideRangeToggled(bool value, List<MeetingLocationModel> locations) {
+    setState(() {
+      _allowOutsidePermittedRange = value;
+      if (!value) {
+        if (_meetingLocationId == null) return;
+        final loc = _locationById(_meetingLocationId, locations);
+        if (loc == null) return;
+        final allowed = loc.allowedTerritories.toSet();
+        _selectedTerritoryIds.removeWhere((tid) => !allowed.contains(tid));
+      }
+    });
+  }
+
+  MeetingLocationModel? _locationById(
+    String? id,
+    List<MeetingLocationModel> locations,
+  ) {
+    if (id == null) return null;
+    try {
+      return locations.firstWhere((l) => l.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<List<MeetingLocationModel>>>(
+      meetingLocationsProvider,
+      (previous, next) {
+        next.whenData(_pruneTerritoriesToAllowed);
+      },
+    );
+
     final asyncUsers = ref.watch(usersProvider);
     final asyncLocations = ref.watch(meetingLocationsProvider);
     final asyncTerritories = ref.watch(territoriesProvider);
@@ -105,11 +171,38 @@ class _DayAssignmentDialogState extends ConsumerState<DayAssignmentDialog> {
                       _MeetingLocationSelector(
                         meetingLocationId: _meetingLocationId,
                         locations: asyncLocations.whenOrNull(data: (d) => d) ?? [],
-                        onChanged: (id) =>
-                            setState(() => _meetingLocationId = id),
+                        onChanged: (id) => _onMeetingLocationChanged(
+                          id,
+                          asyncLocations.whenOrNull(data: (d) => d) ?? [],
+                        ),
                       ),
                       const SizedBox(height: AppSpacing.md),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Usar território fora do alcance permitido',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(fontSize: 13),
+                            ),
+                          ),
+                          Switch(
+                            value: _allowOutsidePermittedRange,
+                            onChanged: (v) => _onOutsideRangeToggled(
+                              v,
+                              asyncLocations.whenOrNull(data: (d) => d) ?? [],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
                       _TerritoriesSelector(
+                        meetingLocationId: _meetingLocationId,
+                        locations: asyncLocations.whenOrNull(data: (d) => d) ?? [],
+                        allowOutsidePermittedRange: _allowOutsidePermittedRange,
                         selectedIds: _selectedTerritoryIds,
                         territories: asyncTerritories.whenOrNull(data: (d) => d) ?? [],
                         onToggle: (id) {
@@ -171,7 +264,7 @@ class _DayAssignmentDialogState extends ConsumerState<DayAssignmentDialog> {
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Atribuição salva'),
+          content: Text('Designação salva'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -198,7 +291,7 @@ class _ConductorSelector extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Condutor',
+          'Dirigente',
           style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -207,7 +300,7 @@ class _ConductorSelector extends StatelessWidget {
         DropdownButtonFormField<String>(
           value: conductorId,
           decoration: const InputDecoration(
-            hintText: 'Selecione o condutor',
+            hintText: 'Selecione o dirigente',
             border: OutlineInputBorder(),
           ),
           items: [
@@ -269,18 +362,146 @@ class _MeetingLocationSelector extends StatelessWidget {
 
 class _TerritoriesSelector extends StatelessWidget {
   const _TerritoriesSelector({
+    required this.meetingLocationId,
+    required this.locations,
+    required this.allowOutsidePermittedRange,
     required this.selectedIds,
     required this.territories,
     required this.onToggle,
   });
 
+  final String? meetingLocationId;
+  final List<MeetingLocationModel> locations;
+  final bool allowOutsidePermittedRange;
   final Set<String> selectedIds;
   final List<TerritoryModel> territories;
   final ValueChanged<String> onToggle;
 
+  List<TerritoryModel> _eligibleTerritories() {
+    if (meetingLocationId == null) return [];
+    MeetingLocationModel? loc;
+    try {
+      loc = locations.firstWhere((l) => l.id == meetingLocationId);
+    } catch (_) {
+      return [];
+    }
+    final allowed = loc.allowedTerritories.toSet();
+    if (allowed.isEmpty) return [];
+    return territories.where((t) => allowed.contains(t.id)).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final grouped = groupTerritoriesByNeighborhood(territories);
+    if (!allowOutsidePermittedRange && meetingLocationId == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Territórios (por bairro)',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Text(
+              'Selecione o local de saída para ver os territórios permitidos — ou ative a opção acima para listar todos.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (allowOutsidePermittedRange) {
+      if (territories.isEmpty) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Territórios (por bairro)',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Text(
+                'Nenhum território cadastrado',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ),
+          ],
+        );
+      }
+      return _buildTerritoryGroups(context, territories);
+    }
+
+    final eligible = _eligibleTerritories();
+    final loc = _locationById(meetingLocationId, locations);
+
+    if (loc != null && loc.allowedTerritories.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Territórios (por bairro)',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Text(
+              'Este local não tem territórios permitidos. Configure-os em Locais de saída.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (eligible.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Territórios (por bairro)',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Text(
+              'Nenhum território permitido encontrado para este local.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return _buildTerritoryGroups(context, eligible);
+  }
+
+  Widget _buildTerritoryGroups(
+    BuildContext context,
+    List<TerritoryModel> eligible,
+  ) {
+    final grouped = groupTerritoriesByNeighborhood(eligible);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -306,7 +527,11 @@ class _TerritoriesSelector extends StatelessWidget {
               ),
               children: e.value
                   .map((t) => CheckboxListTile(
-                        title: Text(t.name),
+                        title: Text(
+                          t.number != null && t.number!.isNotEmpty
+                              ? '${t.number} - ${t.name}'
+                              : t.name,
+                        ),
                         value: selectedIds.contains(t.id),
                         onChanged: (_) => onToggle(t.id),
                       ))
@@ -314,17 +539,19 @@ class _TerritoriesSelector extends StatelessWidget {
             ),
           );
         }),
-        if (grouped.isEmpty)
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: Text(
-              'Nenhum território cadastrado',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
-          ),
       ],
     );
+  }
+
+  MeetingLocationModel? _locationById(
+    String? id,
+    List<MeetingLocationModel> locations,
+  ) {
+    if (id == null) return null;
+    try {
+      return locations.firstWhere((l) => l.id == id);
+    } catch (_) {
+      return null;
+    }
   }
 }

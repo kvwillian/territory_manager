@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../../core/constants/app_spacing.dart';
 import '../providers/work_sessions_provider.dart';
 import '../providers/territories_provider.dart';
+import '../providers/users_provider.dart';
 import '../../assignments/models/work_session_model.dart';
+import '../../auth/models/user_model.dart';
+import '../../territories/models/territory_model.dart';
 import 'admin_shell.dart';
-import '../../../../shared/widgets/app_card.dart';
+import '../../history/widgets/work_session_history_card.dart';
 
-/// Admin history screen - work sessions timeline.
+/// Admin history — log de saídas de campo por dirigente e território.
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
 
@@ -17,6 +19,7 @@ class HistoryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncSessions = ref.watch(workSessionsProvider);
     final asyncTerritories = ref.watch(territoriesProvider);
+    final asyncUsers = ref.watch(usersProvider);
 
     return asyncSessions.when(
       loading: () => AdminShell(
@@ -28,82 +31,93 @@ class HistoryScreen extends ConsumerWidget {
         child: Center(child: Text('Erro: $e')),
       ),
       data: (sessions) {
-        final territories =
-            asyncTerritories.hasValue ? asyncTerritories.value! : [];
+        final List<TerritoryModel> territories = asyncTerritories.hasValue
+            ? asyncTerritories.value!
+            : <TerritoryModel>[];
+        final users = asyncUsers.whenOrNull(data: (d) => d) ?? <UserModel>[];
+        final nameById = {for (final u in users) u.id: u.name};
+
+        String dirigenteName(WorkSessionModel s) {
+          return nameById[s.conductorId] ?? 'Dirigente desconhecido';
+        }
+
         return AdminShell(
           title: 'Histórico',
-          child: ListView.builder(
-            padding: const EdgeInsets.all(AppSpacing.screenPadding),
-            itemCount: sessions.length,
-            itemBuilder: (context, index) {
-              final session = sessions[index];
-              final territory = territories
-                  .where((t) => t.id == session.territoryId)
-                  .firstOrNull;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                child: _HistoryCard(
-                  session: session,
-                  territoryName: territory?.name ?? 'Território desconhecido',
+          child: sessions.isEmpty
+              ? _EmptyHistory(
+                  message:
+                      'Ainda não há registros de saída de campo na congregação.',
+                )
+              : ListView(
+                  padding: const EdgeInsets.all(AppSpacing.screenPadding),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                      child: Text(
+                        'Log de dirigentes — saídas de campo registradas (mais recentes primeiro).',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                      ),
+                    ),
+                    ...sessions.map((session) {
+                      final territory = territories
+                          .where((t) => t.id == session.territoryId)
+                          .firstOrNull;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                        child: WorkSessionHistoryCard(
+                          session: session,
+                          territoryName:
+                              territory?.name ?? 'Território desconhecido',
+                          dirigenteLabel: dirigenteName(session),
+                        ),
+                      );
+                    }),
+                  ],
                 ),
-              );
-            },
-          ),
         );
       },
     );
   }
 }
 
-class _HistoryCard extends StatelessWidget {
-  const _HistoryCard({
-    required this.session,
-    required this.territoryName,
-  });
+class _EmptyHistory extends StatelessWidget {
+  const _EmptyHistory({required this.message});
 
-  final WorkSessionModel session;
-  final String territoryName;
+  final String message;
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.calendar_today,
-                size: 20,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Text(
-                DateFormat('d/MM/yyyy', 'pt_BR').format(session.date),
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            territoryName,
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-          Text(
-            '${session.segmentsWorked.length} segmentos concluídos',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          if (session.notes != null && session.notes!.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.sm),
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.screenPadding),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.history_edu_outlined,
+              size: 56,
+              color: Theme.of(context).colorScheme.outline,
+            ),
+            const SizedBox(height: AppSpacing.md),
             Text(
-              session.notes!,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontStyle: FontStyle.italic,
-                  ),
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
             ),
           ],
-        ],
+        ),
       ),
     );
+  }
+}
+
+extension _FirstOrNull<E> on Iterable<E> {
+  E? get firstOrNull {
+    final it = iterator;
+    return it.moveNext() ? it.current : null;
   }
 }

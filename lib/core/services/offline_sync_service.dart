@@ -189,6 +189,14 @@ class OfflineSyncService {
     }
   }
 
+  /// Runs refresh when there are no pending items. Used for 30s periodic fetch.
+  Future<void> maybePeriodicRefresh() async {
+    if (kIsWeb || _local == null) return;
+    final pending = await _local!.getPendingSyncItemsCount();
+    if (pending > 0) return;
+    await refreshFromFirestore();
+  }
+
   /// Processes pending sync queue when device reconnects.
   Future<void> processSyncQueue() async {
     if (kIsWeb || _local == null) return;

@@ -1,99 +1,114 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../../core/constants/app_spacing.dart';
 import '../../admin/providers/work_sessions_provider.dart';
 import '../../admin/providers/territories_provider.dart';
-import '../../assignments/models/work_session_model.dart';
-import '../../../../shared/widgets/app_card.dart';
+import '../../territories/models/territory_model.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../history/widgets/work_session_history_card.dart';
 
-/// Conductor history screen - work sessions timeline.
+/// Histórico do condutor — apenas os próprios registros de saída.
 class ConductorHistoryScreen extends ConsumerWidget {
   const ConductorHistoryScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateProvider);
     final asyncSessions = ref.watch(workSessionsProvider);
     final asyncTerritories = ref.watch(territoriesProvider);
+
+    if (authState is! AuthAuthenticated) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final userId = authState.user.id;
 
     return asyncSessions.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Erro: $e')),
-      data: (sessions) {
-        final territories =
-            asyncTerritories.hasValue ? asyncTerritories.value! : [];
-        return ListView.builder(
-          padding: const EdgeInsets.all(AppSpacing.screenPadding),
-          itemCount: sessions.length,
-          itemBuilder: (context, index) {
-            final session = sessions[index];
-            final territory = territories
-                .where((t) => t.id == session.territoryId)
-                .firstOrNull;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.md),
-              child: _HistoryCard(
-                session: session,
-                territoryName: territory?.name ?? 'Território desconhecido',
-              ),
-            );
-          },
-        );
+      data: (allSessions) {
+        final sessions = allSessions
+            .where((s) => s.conductorId == userId)
+            .toList(growable: false);
+        final List<TerritoryModel> territories = asyncTerritories.hasValue
+            ? asyncTerritories.value!
+            : <TerritoryModel>[];
+        final dirigenteLabel = authState.user.name;
+
+        return sessions.isEmpty
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.screenPadding),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.history_edu_outlined,
+                        size: 56,
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Text(
+                        'Nenhum registro de saída ainda.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        'Quando salvar progresso em um território, o registro aparecerá aqui.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : ListView(
+                padding: const EdgeInsets.all(AppSpacing.screenPadding),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                    child: Text(
+                      'Seu log de saídas de campo (mais recentes primeiro).',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                    ),
+                  ),
+                  ...sessions.map((session) {
+                    final territory = _territoryForId(
+                      territories,
+                      session.territoryId,
+                    );
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                      child: WorkSessionHistoryCard(
+                        session: session,
+                        territoryName:
+                            territory?.name ?? 'Território desconhecido',
+                        dirigenteLabel: dirigenteLabel,
+                      ),
+                    );
+                  }),
+                ],
+              );
       },
     );
   }
 }
 
-class _HistoryCard extends StatelessWidget {
-  const _HistoryCard({
-    required this.session,
-    required this.territoryName,
-  });
-
-  final WorkSessionModel session;
-  final String territoryName;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.calendar_today,
-                size: 20,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Text(
-                DateFormat('d/MM/yyyy', 'pt_BR').format(session.date),
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            territoryName,
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-          Text(
-            '${session.segmentsWorked.length} segmentos concluídos',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          if (session.notes != null && session.notes!.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              session.notes!,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontStyle: FontStyle.italic,
-                  ),
-            ),
-          ],
-        ],
-      ),
-    );
+TerritoryModel? _territoryForId(
+  List<TerritoryModel> territories,
+  String territoryId,
+) {
+  for (final t in territories) {
+    if (t.id == territoryId) return t;
   }
+  return null;
 }

@@ -63,6 +63,12 @@ class TerritoryProgressService {
     if (online && db != null) {
       await segmentRepo.syncSegmentStatuses(territoryId, statusBySegmentId);
       await workSessionRepo.createWorkSession(workSession);
+      // Update local cache so reads reflect the change
+      final local = LocalRepository(db);
+      final statusMap =
+          statusBySegmentId.map((k, v) => MapEntry(k, v.name));
+      await local.updateSegmentStatuses(territoryId, statusMap);
+      syncService.processSyncQueue(); // Push any pending from previous offline
       if (!skipInvalidate) _ref.invalidate(territoriesProvider);
       return;
     }
@@ -74,6 +80,7 @@ class TerritoryProgressService {
       await local.updateSegmentStatuses(territoryId, statusMap);
       await syncService.queueSyncSegmentStatuses(territoryId, statusBySegmentId);
       await syncService.queueCreateWorkSession(workSession);
+      syncService.processSyncQueue(); // Push when back online
       if (!skipInvalidate) _ref.invalidate(territoriesProvider);
     }
   }

@@ -35,6 +35,14 @@ class OfflineTerritoryRepository implements TerritoryRepository {
     if (hasCached) {
       final cid = congregationId ?? defaultCongregationId;
       final maps = await local.getTerritories(cid);
+      // Merge segments from segments table (source of truth for status updates)
+      for (final m in maps) {
+        final tid = m['id'] as String?;
+        if (tid != null) {
+          final segs = await local.getSegmentsByTerritory(tid);
+          if (segs.isNotEmpty) m['segments'] = segs;
+        }
+      }
       final result = maps.map((m) => TerritoryModel.fromMap(m)).toList();
       onReadFromCache?.call();
       return result;
@@ -68,6 +76,8 @@ class OfflineTerritoryRepository implements TerritoryRepository {
 
     final cached = await local.getTerritoryById(id);
     if (cached != null) {
+      final segs = await local.getSegmentsByTerritory(id);
+      if (segs.isNotEmpty) cached['segments'] = segs;
       onReadFromCache?.call();
       return TerritoryModel.fromMap(cached);
     }

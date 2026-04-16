@@ -27,11 +27,11 @@ class AssignmentsScreen extends ConsumerWidget {
 
     return asyncAssignments.when(
       loading: () => AdminShell(
-        title: 'Atribuições',
+        title: 'Designações',
         child: const Center(child: CircularProgressIndicator()),
       ),
       error: (e, _) => AdminShell(
-        title: 'Atribuições',
+        title: 'Designações',
         child: Center(child: Text('Erro: $e')),
       ),
       data: (assignments) => _AssignmentsContent(
@@ -72,7 +72,7 @@ class _AssignmentsContent extends ConsumerWidget {
         asyncLocations.whenOrNull(data: (d) => d) ?? <MeetingLocationModel>[];
 
     return AdminShell(
-      title: 'Atribuições',
+      title: 'Designações',
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenPadding),
         child: Column(
@@ -108,7 +108,7 @@ class _AssignmentsContent extends ConsumerWidget {
             FilledButton.icon(
               onPressed: () => _generateAssignments(context, ref),
               icon: const Icon(Icons.auto_awesome),
-              label: const Text('Gerar atribuições (em breve)'),
+              label: const Text('Gerar designações (em breve)'),
             ),
           ],
         ),
@@ -145,7 +145,7 @@ class _AssignmentsContent extends ConsumerWidget {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Atribuições geradas'),
+          content: Text('Designações geradas'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -288,7 +288,7 @@ class _DayCard extends StatelessWidget {
                 ),
             ] else
               Text(
-                'Toque para atribuir condutor, local e territórios',
+                'Toque para designar dirigente, local e territórios',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context).colorScheme.primary,
                       fontStyle: FontStyle.italic,

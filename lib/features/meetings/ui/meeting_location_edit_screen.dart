@@ -6,6 +6,9 @@ import '../../../core/constants/app_spacing.dart';
 import '../../../shared/widgets/address_search_field.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../admin/providers/territories_provider.dart';
+import '../../territories/models/territory_model.dart';
+import '../../territories/utils/neighborhood_territory_utils.dart';
+import '../../territories/widgets/neighborhood_territory_accordion_section.dart';
 import '../models/meeting_location_model.dart';
 import '../providers/meeting_location_repository_provider.dart';
 import '../../admin/ui/admin_shell.dart';
@@ -304,25 +307,42 @@ class _MeetingLocationEditScreenState
                   ),
                 ),
                 error: (e, _) => Text('Erro ao carregar territórios: $e'),
-                data: (territories) => Column(
-                  children: territories.map((t) {
-                    final isSelected = _selectedTerritoryIds.contains(t.id);
-                    return CheckboxListTile(
-                      title: Text(t.name),
-                      subtitle: Text(t.neighborhood),
-                      value: isSelected,
-                      onChanged: (v) {
-                        setState(() {
-                          if (v == true) {
-                            _selectedTerritoryIds.add(t.id);
-                          } else {
-                            _selectedTerritoryIds.remove(t.id);
-                          }
-                        });
-                      },
-                    );
-                  }).toList(),
-                ),
+                data: (territories) {
+                  final groups = groupTerritoriesByNeighborhood(territories);
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final e in groups.entries)
+                        if (e.value.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                            child: NeighborhoodTerritoryAccordionSection(
+                              neighborhoodName: e.key,
+                              territories: e.value,
+                              initiallyExpanded: false,
+                              showNeighborhoodCompletionPercent: false,
+                              itemBuilder: (context, t) {
+                                final isSelected =
+                                    _selectedTerritoryIds.contains(t.id);
+                                return _AllowedTerritoryTile(
+                                  territory: t,
+                                  selected: isSelected,
+                                  onChanged: (v) {
+                                    setState(() {
+                                      if (v) {
+                                        _selectedTerritoryIds.add(t.id);
+                                      } else {
+                                        _selectedTerritoryIds.remove(t.id);
+                                      }
+                                    });
+                                  },
+                                );
+                              },
+                            ),
+                          ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: AppSpacing.lg),
               FilledButton(
@@ -343,6 +363,43 @@ class _MeetingLocationEditScreenState
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _AllowedTerritoryTile extends StatelessWidget {
+  const _AllowedTerritoryTile({
+    required this.territory,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final TerritoryModel territory;
+  final bool selected;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = territory.number != null && territory.number!.isNotEmpty
+        ? '${territory.number} - ${territory.name}'
+        : territory.name;
+
+    return AppCard(
+      onTap: () => onChanged(!selected),
+      child: Row(
+        children: [
+          Checkbox(
+            value: selected,
+            onChanged: (v) => onChanged(v ?? false),
+          ),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -44,10 +44,11 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Firebase - sensitive config (use FlutterFire configure to regenerate)
+# Firebase - NEVER commit these (contain API keys). Use: flutterfire configure
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
 lib/firebase_options.dart
+macos/Runner/GoogleService-Info.plist
 
 # Firebase Functions
 functions/node_modules/

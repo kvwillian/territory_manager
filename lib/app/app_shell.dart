@@ -36,6 +36,7 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   StreamSubscription? _connectivitySubscription;
+  Timer? _periodicRefreshTimer;
   bool _syncStarted = false;
 
   @override
@@ -50,6 +51,10 @@ class _AppShellState extends ConsumerState<AppShell> {
         }
       }
     });
+    _periodicRefreshTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => ref.read(offlineSyncServiceProvider).maybePeriodicRefresh(),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_syncStarted) {
         _syncStarted = true;
@@ -61,6 +66,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   void dispose() {
     _connectivitySubscription?.cancel();
+    _periodicRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -80,7 +86,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (location == '/admin/meeting-locations') return 'Locais de Saída';
     if (location.startsWith('/admin/meeting-locations/create')) return 'Novo Local';
     if (location.startsWith('/admin/meeting-locations/edit/')) return 'Editar Local';
-    if (location == '/admin/assignments') return 'Atribuições';
+    if (location == '/admin/assignments') return 'Designações';
     if (location == '/admin/history') return 'Histórico';
     return 'Gerenciador de Territórios';
   }
@@ -252,7 +258,7 @@ const _adminItems = [
   _DrawerItem(icon: Icons.location_city_outlined, label: 'Bairros', path: '/admin/bairros'),
   _DrawerItem(icon: Icons.place_outlined, label: 'Locais de Saída', path: '/admin/meeting-locations'),
   _DrawerItem(icon: Icons.person_outline, label: 'Usuários', path: '/admin/users'),
-  _DrawerItem(icon: Icons.assignment_outlined, label: 'Atribuições Semanais', path: '/admin/assignments'),
+  _DrawerItem(icon: Icons.assignment_outlined, label: 'Designações semanais', path: '/admin/assignments'),
   _DrawerItem(icon: Icons.history, label: 'Histórico', path: '/admin/history'),
 ];
 

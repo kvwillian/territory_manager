@@ -6,6 +6,9 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../territories/models/territory_model.dart';
 import '../../territories/models/territory_status.dart';
+import '../../territories/utils/neighborhood_territory_utils.dart';
+import '../../territories/widgets/neighborhood_territory_accordion_section.dart';
+import '../../territories/widgets/territory_progress_summary.dart';
 import '../providers/territories_provider.dart';
 import 'admin_shell.dart';
 import '../../../../shared/widgets/app_card.dart';
@@ -168,15 +171,30 @@ class _DashboardContent extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: AppSpacing.md),
-          ...territories.map(
-            (t) => Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.md),
-              child: _TerritoryDashboardCard(territory: t),
-            ),
-          ),
+          ..._dashboardNeighborhoodSections(context, territories),
         ],
       ),
     );
+  }
+
+  /// Accordion sections by neighborhood; skips empty groups.
+  Iterable<Widget> _dashboardNeighborhoodSections(
+    BuildContext context,
+    List<TerritoryModel> territories,
+  ) sync* {
+    final groups = groupTerritoriesByNeighborhood(territories);
+    for (final entry in groups.entries) {
+      if (entry.value.isEmpty) continue;
+      yield Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+        child: NeighborhoodTerritoryAccordionSection(
+          neighborhoodName: entry.key,
+          territories: entry.value,
+          initiallyExpanded: false,
+          itemBuilder: (context, t) => TerritoryDashboardCard(territory: t),
+        ),
+      );
+    }
   }
 
   List<TerritoryModel> _getOverdueTerritories(List<TerritoryModel> territories) {
@@ -245,56 +263,17 @@ class _StatusCard extends StatelessWidget {
   }
 }
 
-class _TerritoryDashboardCard extends StatelessWidget {
-  const _TerritoryDashboardCard({required this.territory});
+/// Territory row for dashboard lists: name, percentage, progress bar; taps open edit.
+class TerritoryDashboardCard extends StatelessWidget {
+  const TerritoryDashboardCard({super.key, required this.territory});
 
   final TerritoryModel territory;
 
   @override
   Widget build(BuildContext context) {
-    final percentage =
-        territory.totalSegments > 0
-            ? (territory.completedCount / territory.totalSegments * 100).round()
-            : 0;
-
     return AppCard(
       onTap: () => context.push('/admin/territories/edit/${territory.id}'),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      territory.name,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    Text(
-                      '${territory.completedCount} ruas concluídas',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                '$percentage%',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: AppColors.successGreen,
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          ProgressIndicatorBar(
-            completed: territory.completedCount,
-            total: territory.totalSegments,
-          ),
-        ],
-      ),
+      child: TerritoryProgressSummary(territory: territory),
     );
   }
 }
