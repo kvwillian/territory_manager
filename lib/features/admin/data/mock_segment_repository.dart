@@ -95,6 +95,31 @@ class MockSegmentRepository implements SegmentRepository {
   }
 
   @override
+  Future<void> setSegmentsCompletedWithDates(
+    Map<String, DateTime> segmentIdToWorkedDate,
+  ) async {
+    if (segmentIdToWorkedDate.isEmpty) return;
+    final territories = await _territoryRepo.getTerritories();
+    for (final t in territories) {
+      var changed = false;
+      final updated = t.segments.map((s) {
+        final d = segmentIdToWorkedDate[s.id];
+        if (d == null) return s;
+        changed = true;
+        final prev = s.lastWorkedDate;
+        final use = prev == null || d.isAfter(prev) ? d : prev;
+        return s.copyWith(
+          status: SegmentStatus.completed,
+          lastWorkedDate: use,
+        );
+      }).toList();
+      if (changed) {
+        await _territoryRepo.updateTerritory(t.copyWith(segments: updated));
+      }
+    }
+  }
+
+  @override
   Future<void> resetSegmentsForTerritory(String territoryId) async {
     final t = await _territoryRepo.getTerritoryById(territoryId);
     if (t == null) return;

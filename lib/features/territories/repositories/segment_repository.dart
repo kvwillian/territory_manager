@@ -11,6 +11,10 @@ abstract class SegmentRepository {
     String territoryId,
     Map<String, SegmentStatus> statusBySegmentId,
   );
+  /// Marks segments completed with explicit last-worked dates (e.g. bulk history import).
+  Future<void> setSegmentsCompletedWithDates(
+    Map<String, DateTime> segmentIdToWorkedDate,
+  );
   Future<void> createSegments(String territoryId, List<SegmentModel> segments);
   Future<void> updateSegments(String territoryId, List<SegmentModel> segments);
   Future<void> deleteSegmentsByTerritory(String territoryId);

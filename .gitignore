@@ -53,3 +53,6 @@ macos/Runner/GoogleService-Info.plist
 # Firebase Functions
 functions/node_modules/
 functions/lib/
+
+# Local secrets (Resend, etc.)
+.env

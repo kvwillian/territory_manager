@@ -14,6 +14,8 @@ import '../providers/assignments_provider.dart';
 import '../providers/territories_provider.dart';
 import '../providers/users_provider.dart';
 import '../../meetings/providers/meeting_location_repository_provider.dart';
+import '../../field_groups/models/field_group_model.dart';
+import '../../field_groups/providers/field_group_repository_provider.dart';
 
 /// Dialog to manually assign conductor, meeting location, and territories for a day.
 class DayAssignmentDialog extends ConsumerStatefulWidget {
@@ -33,19 +35,24 @@ class DayAssignmentDialog extends ConsumerStatefulWidget {
 }
 
 class _DayAssignmentDialogState extends ConsumerState<DayAssignmentDialog> {
-  String? _conductorId;
+  final List<String> _conductorIds = [];
   String? _meetingLocationId;
+  String? _groupId;
   final Set<String> _selectedTerritoryIds = {};
   /// When true, lista todos os territórios (ignora o permitido no local de saída).
   bool _allowOutsidePermittedRange = false;
+
+  bool get _isSunday => widget.date.weekday == DateTime.sunday;
 
   @override
   void initState() {
     super.initState();
     if (widget.initialAssignment != null) {
-      _conductorId = widget.initialAssignment!.conductorId;
-      _meetingLocationId = widget.initialAssignment!.meetingLocationId;
-      _selectedTerritoryIds.addAll(widget.initialAssignment!.allTerritoryIds);
+      final a = widget.initialAssignment!;
+      _conductorIds.addAll(a.conductorIds);
+      _meetingLocationId = a.meetingLocationId;
+      _groupId = a.groupId;
+      _selectedTerritoryIds.addAll(a.allTerritoryIds);
     }
   }
 
@@ -118,10 +125,21 @@ class _DayAssignmentDialogState extends ConsumerState<DayAssignmentDialog> {
     final asyncUsers = ref.watch(usersProvider);
     final asyncLocations = ref.watch(meetingLocationsProvider);
     final asyncTerritories = ref.watch(territoriesProvider);
+    final asyncGroups = ref.watch(fieldGroupsProvider);
+    final fieldGroups = asyncGroups.when(
+      data: (d) => d,
+      loading: () => <FieldGroupModel>[],
+      error: (_, __) => <FieldGroupModel>[],
+    );
+    final fieldGroupsLoading = asyncGroups.when(
+      data: (_) => false,
+      loading: () => true,
+      error: (_, __) => false,
+    );
 
     return Dialog(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 640),
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.md),
           child: Column(
@@ -161,12 +179,28 @@ class _DayAssignmentDialogState extends ConsumerState<DayAssignmentDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _ConductorSelector(
-                        conductorId: _conductorId,
+                      _ConductorMultiSelector(
+                        selectedIds: _conductorIds,
                         users: asyncUsers.whenOrNull(data: (d) => d) ?? [],
-                        onChanged: (id) =>
-                            setState(() => _conductorId = id),
+                        onToggle: (id) {
+                          setState(() {
+                            if (_conductorIds.contains(id)) {
+                              _conductorIds.remove(id);
+                            } else {
+                              _conductorIds.add(id);
+                            }
+                          });
+                        },
                       ),
+                      if (_isSunday) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        _SundayGroupSelector(
+                          groupId: _groupId,
+                          groups: fieldGroups,
+                          loading: fieldGroupsLoading,
+                          onChanged: (id) => setState(() => _groupId = id),
+                        ),
+                      ],
                       const SizedBox(height: AppSpacing.md),
                       _MeetingLocationSelector(
                         meetingLocationId: _meetingLocationId,
@@ -249,10 +283,11 @@ class _DayAssignmentDialogState extends ConsumerState<DayAssignmentDialog> {
     final assignment = AssignmentModel(
       id: id,
       date: widget.date,
-      conductorId: _conductorId,
+      conductorIds: List<String>.from(_conductorIds),
       meetingLocationId: _meetingLocationId,
       territoryIds: _selectedTerritoryIds.toList(),
       congregationId: congregationId,
+      groupId: _isSunday ? _groupId : null,
     );
     await repo.saveAssignment(assignment);
     ref.invalidate(assignmentsProvider);
@@ -272,46 +307,105 @@ class _DayAssignmentDialogState extends ConsumerState<DayAssignmentDialog> {
   }
 }
 
-class _ConductorSelector extends StatelessWidget {
-  const _ConductorSelector({
-    required this.conductorId,
+class _ConductorMultiSelector extends StatelessWidget {
+  const _ConductorMultiSelector({
+    required this.selectedIds,
     required this.users,
-    required this.onChanged,
+    required this.onToggle,
   });
 
-  final String? conductorId;
+  final List<String> selectedIds;
   final List<UserModel> users;
-  final ValueChanged<String?> onChanged;
+  final ValueChanged<String> onToggle;
 
   @override
   Widget build(BuildContext context) {
-    final conductors = users.where((u) => u.isConductor).toList();
+    final conductors = users.where((u) => u.isConductor).toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Dirigente',
+          'Dirigentes',
           style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 color: Theme.of(context).colorScheme.primary,
               ),
         ),
         const SizedBox(height: AppSpacing.xs),
-        DropdownButtonFormField<String>(
-          value: conductorId,
-          decoration: const InputDecoration(
-            hintText: 'Selecione o dirigente',
-            border: OutlineInputBorder(),
+        if (conductors.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            child: Text(
+              'Nenhum usuário com perfil de condutor.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          )
+        else
+          ...conductors.map(
+            (u) => CheckboxListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(u.name),
+              value: selectedIds.contains(u.id),
+              onChanged: (_) => onToggle(u.id),
+            ),
           ),
-          items: [
-            const DropdownMenuItem(value: null, child: Text('— Nenhum —')),
-            ...conductors.map((u) => DropdownMenuItem(
-                  value: u.id,
-                  child: Text(u.name),
-                )),
-          ],
-          onChanged: onChanged,
+      ],
+    );
+  }
+}
+
+class _SundayGroupSelector extends StatelessWidget {
+  const _SundayGroupSelector({
+    required this.groupId,
+    required this.groups,
+    required this.loading,
+    required this.onChanged,
+  });
+
+  final String? groupId;
+  final List<FieldGroupModel> groups;
+  final bool loading;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Grupo (domingo)',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+              ),
         ),
+        const SizedBox(height: AppSpacing.xs),
+        if (loading)
+          const Padding(
+            padding: EdgeInsets.all(AppSpacing.sm),
+            child: LinearProgressIndicator(),
+          )
+        else
+          DropdownButtonFormField<String>(
+            value: groupId,
+            decoration: const InputDecoration(
+              hintText: 'Grupo para o texto do WhatsApp',
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('— Nenhum —')),
+              ...groups.map(
+                (g) => DropdownMenuItem(
+                  value: g.id,
+                  child: Text(g.name),
+                ),
+              ),
+            ],
+            onChanged: onChanged,
+          ),
       ],
     );
   }

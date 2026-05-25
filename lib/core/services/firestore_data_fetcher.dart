@@ -100,15 +100,24 @@ class FirestoreDataFetcher {
     final territoryIds = territoryIdsRaw != null
         ? (territoryIdsRaw as List<dynamic>).map((e) => e as String).toList()
         : <String>[];
+    final conductorIdsRaw = data['conductorIds'] as List<dynamic>?;
+    var conductorIds = conductorIdsRaw != null
+        ? conductorIdsRaw.map((e) => e as String).toList()
+        : <String>[];
+    final legacy = data['conductorId'] as String?;
+    if (conductorIds.isEmpty && legacy != null && legacy.isNotEmpty) {
+      conductorIds = [legacy];
+    }
     return AssignmentModel(
       id: doc.id,
       date: dateTime,
       territoryId: data['territoryId'] as String?,
-      conductorId: data['conductorId'] as String?,
+      conductorIds: conductorIds,
       meetingLocationId: data['meetingLocationId'] as String?,
       territoryIds: territoryIds,
       preachingSessionId: data['preachingSessionId'] as String?,
       congregationId: data['congregationId'] as String? ?? defaultCongregationId,
+      groupId: data['groupId'] as String?,
     );
   }
 

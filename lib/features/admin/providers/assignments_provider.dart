@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import '../../../core/providers/invalidation_callbacks.dart';
 import '../../assignments/models/assignment_model.dart';
 import '../../assignments/providers/assignment_repository_provider.dart';
+import '../../assignments/utils/assignment_week_calendar.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../meetings/providers/preaching_session_repository_provider.dart';
 
@@ -45,7 +46,7 @@ final conductorAssignmentForDateProvider =
     final aDate = DateTime(a.date.year, a.date.month, a.date.day);
     if (aDate != target) continue;
 
-    final matchesByAssignment = a.conductorId == conductorId;
+    final matchesByAssignment = a.assignsConductor(conductorId);
     var matchesBySession = false;
     if (!matchesByAssignment &&
         a.preachingSessionId != null &&
@@ -77,7 +78,7 @@ final conductorAssignmentDatesProvider =
 
   final dates = <DateTime>{};
   for (final a in all) {
-    final matchesByAssignment = a.conductorId == conductorId;
+    final matchesByAssignment = a.assignsConductor(conductorId);
     var matchesBySession = false;
     if (!matchesByAssignment &&
         a.preachingSessionId != null &&
@@ -95,9 +96,9 @@ final conductorAssignmentDatesProvider =
   return dates;
 });
 
-/// Selected week start (Monday) for the assignments screen.
+/// Selected week start (Tuesday of the Terça–Domingo grid) for the assignments screen.
 final selectedWeekStartProvider =
-    StateProvider<DateTime>((ref) => _getWeekStart(DateTime.now()));
+    StateProvider<DateTime>((ref) => assignmentGridWeekStart(DateTime.now()));
 
 /// Assignments for the currently selected week.
 final assignmentsForWeekProvider =
@@ -117,7 +118,7 @@ final todayAssignmentForConductorProvider =
   final conductorId = authState.user.id;
   final repo = ref.watch(assignmentRepositoryProvider);
   final assignment = await repo.getAssignmentForDate(DateTime.now());
-  if (assignment == null || assignment.conductorId != conductorId) {
+  if (assignment == null || !assignment.assignsConductor(conductorId)) {
     return null;
   }
   return assignment;
@@ -140,7 +141,7 @@ final nextAssignmentForConductorProvider =
     debugPrint(
       'nextAssignmentForConductor: conductorId=$conductorId, '
       'totalAssignments=${all.length}, '
-      'sampleConductorIds=${all.take(3).map((a) => a.conductorId).toList()}',
+      'sampleConductorIds=${all.take(3).map((a) => a.conductorIds).toList()}',
     );
   }
 
@@ -151,7 +152,7 @@ final nextAssignmentForConductorProvider =
   for (final a in all) {
     if (a.date.isBefore(todayStart)) continue;
 
-    final matchesByAssignment = a.conductorId == conductorId;
+    final matchesByAssignment = a.assignsConductor(conductorId);
     var matchesBySession = false;
     if (!matchesByAssignment &&
         a.preachingSessionId != null &&
@@ -173,14 +174,10 @@ final nextAssignmentForConductorProvider =
   if (kDebugMode && result != null) {
     debugPrint(
       'nextAssignmentForConductor: found assignment ${result.id} '
-      'for ${result.date}, conductorId=${result.conductorId}',
+      'for ${result.date}, conductorIds=${result.conductorIds}',
     );
   }
 
   return result;
 });
 
-DateTime _getWeekStart(DateTime date) {
-  final weekday = date.weekday;
-  return DateTime(date.year, date.month, date.day - (weekday - 1));
-}

@@ -84,12 +84,25 @@ service cloud.firestore {
             || request.resource.data.congregationId == null);
     }
 
+    match /fieldGroups/{groupId} {
+      allow read, update, delete: if request.auth != null
+        && resourceInUserCongregation(resource);
+      allow create: if request.auth != null
+        && (request.resource.data.congregationId == userCongregationId()
+            || request.resource.data.congregationId == null);
+    }
+
     match /preachingSessions/{sessionId} {
       allow read, update, delete: if request.auth != null
         && resourceInUserCongregation(resource);
       allow create: if request.auth != null
         && (request.resource.data.congregationId == userCongregationId()
             || request.resource.data.congregationId == null);
+    }
+
+    // Apenas Cloud Functions (Admin SDK). Clientes nunca acedem.
+    match /passwordResetRequests/{tokenId} {
+      allow read, write: if false;
     }
   }
 }

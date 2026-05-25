@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/constants/app_spacing.dart';
@@ -9,11 +10,14 @@ import '../providers/territories_provider.dart';
 import '../providers/users_provider.dart';
 import '../../assignments/models/assignment_model.dart';
 import '../../auth/models/user_model.dart';
+import '../../field_groups/models/field_group_model.dart';
+import '../../field_groups/providers/field_group_repository_provider.dart';
 import '../../meetings/models/meeting_location_model.dart';
 import '../../meetings/providers/meeting_location_repository_provider.dart';
 import '../../territories/models/territory_model.dart';
 import 'admin_shell.dart';
 import 'day_assignment_dialog.dart';
+import 'whatsapp_assignment_message_dialog.dart';
 import '../../../../shared/widgets/app_card.dart';
 
 /// Admin assignments screen - weekly territory assignments.
@@ -65,11 +69,17 @@ class _AssignmentsContent extends ConsumerWidget {
     final asyncTerritories = ref.watch(territoriesProvider);
     final asyncUsers = ref.watch(usersProvider);
     final asyncLocations = ref.watch(meetingLocationsProvider);
+    final asyncFieldGroups = ref.watch(fieldGroupsProvider);
     final territories =
         asyncTerritories.whenOrNull(data: (d) => d) ?? <TerritoryModel>[];
     final users = asyncUsers.whenOrNull(data: (d) => d) ?? <UserModel>[];
     final locations =
         asyncLocations.whenOrNull(data: (d) => d) ?? <MeetingLocationModel>[];
+    final fieldGroups = asyncFieldGroups.when(
+      data: (d) => d,
+      loading: () => <FieldGroupModel>[],
+      error: (_, __) => <FieldGroupModel>[],
+    );
 
     return AdminShell(
       title: 'Designações',
@@ -99,8 +109,21 @@ class _AssignmentsContent extends ConsumerWidget {
                   territories: territories,
                   users: users,
                   locations: locations,
+                  fieldGroups: fieldGroups,
                   onTap: () => _openDayDialog(
                       context, ref, date, dayName, assignment, weekStart),
+                  onWhatsapp: assignment != null
+                      ? () => _openWhatsappDialog(
+                            context,
+                            date: date,
+                            dayName: dayName,
+                            assignment: assignment,
+                            users: users,
+                            locations: locations,
+                            territories: territories,
+                            fieldGroups: fieldGroups,
+                          )
+                      : null,
                 ),
               );
             }),
@@ -134,6 +157,30 @@ class _AssignmentsContent extends ConsumerWidget {
     );
   }
 
+  void _openWhatsappDialog(
+    BuildContext context, {
+    required DateTime date,
+    required String dayName,
+    required AssignmentModel assignment,
+    required List<UserModel> users,
+    required List<MeetingLocationModel> locations,
+    required List<TerritoryModel> territories,
+    required List<FieldGroupModel> fieldGroups,
+  }) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => WhatsappAssignmentMessageDialog(
+        date: date,
+        dayName: dayName,
+        assignment: assignment,
+        users: users,
+        locations: locations,
+        territories: territories,
+        fieldGroups: fieldGroups,
+      ),
+    );
+  }
+
   Future<void> _generateAssignments(
     BuildContext context,
     WidgetRef ref,
@@ -160,7 +207,8 @@ class _WeekSelector extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final weekEnd = weekStart.add(const Duration(days: 6));
+    // Grelha Terça–Domingo: 6 dias (terça + 5 = domingo).
+    final weekEnd = weekStart.add(const Duration(days: 5));
     final format = DateFormat('d/MM', 'pt_BR');
 
     return Row(
@@ -200,7 +248,9 @@ class _DayCard extends StatelessWidget {
     required this.territories,
     required this.users,
     required this.locations,
+    required this.fieldGroups,
     required this.onTap,
+    this.onWhatsapp,
   });
 
   final String dayName;
@@ -209,20 +259,32 @@ class _DayCard extends StatelessWidget {
   final List<TerritoryModel> territories;
   final List<UserModel> users;
   final List<MeetingLocationModel> locations;
+  final List<FieldGroupModel> fieldGroups;
   final VoidCallback onTap;
+  final VoidCallback? onWhatsapp;
 
   @override
   Widget build(BuildContext context) {
-    final conductor = assignment?.conductorId != null
-        ? users
-            .where((u) => u.id == assignment!.conductorId)
-            .firstOrNull
-        : null;
+    final conductorNames = assignment != null && assignment!.conductorIds.isNotEmpty
+        ? assignment!.conductorIds
+            .map((id) => users.where((u) => u.id == id).firstOrNull?.name)
+            .whereType<String>()
+            .toList()
+        : <String>[];
+    final conductorsLabel =
+        conductorNames.isEmpty ? null : conductorNames.join(' – ');
+
     final location = assignment?.meetingLocationId != null
         ? locations
             .where((l) => l.id == assignment!.meetingLocationId)
             .firstOrNull
         : null;
+
+    final sundayGroup = date.weekday == DateTime.sunday &&
+            assignment?.groupId != null
+        ? fieldGroups.where((g) => g.id == assignment!.groupId).firstOrNull
+        : null;
+
     final territoryIds = assignment?.allTerritoryIds ?? [];
     final territoryNames = territoryIds
         .map((id) => territories.where((t) => t.id == id).firstOrNull?.name)
@@ -234,68 +296,94 @@ class _DayCard extends StatelessWidget {
             : territoryNames.join(', '))
         : null;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: AppCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  dayName,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const Spacer(),
-                Icon(
-                  Icons.edit_outlined,
-                  size: 18,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ],
-            ),
-            Text(
-              DateFormat('d/MM/yyyy', 'pt_BR').format(date),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+    final hasAnyInfo = conductorsLabel != null ||
+        location != null ||
+        summary != null ||
+        sundayGroup != null;
+
+    return AppCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    dayName,
+                    style: Theme.of(context).textTheme.headlineSmall,
                   ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            if (assignment != null) ...[
-              if (conductor != null)
-                _InfoRow(
-                  icon: Icons.person_outline,
-                  label: conductor.name,
-                ),
-              if (location != null)
-                _InfoRow(
-                  icon: Icons.place_outlined,
-                  label: location.name,
-                ),
-              if (summary != null)
-                _InfoRow(
-                  icon: Icons.map_outlined,
-                  label: summary,
-                ),
-              if (conductor == null && location == null && summary == null)
-                Text(
-                  'Toque para configurar',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                        fontStyle: FontStyle.italic,
+                  Text(
+                    DateFormat('d/MM/yyyy', 'pt_BR').format(date),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  if (assignment != null) ...[
+                    if (conductorsLabel != null)
+                      _InfoRow(
+                        icon: Icons.person_outline,
+                        label: conductorsLabel,
                       ),
-                ),
-            ] else
-              Text(
-                'Toque para designar dirigente, local e territórios',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontStyle: FontStyle.italic,
+                    if (sundayGroup != null)
+                      _InfoRow(
+                        icon: Icons.groups_outlined,
+                        label: sundayGroup.name,
+                      ),
+                    if (location != null)
+                      _InfoRow(
+                        icon: Icons.place_outlined,
+                        label: location.name,
+                      ),
+                    if (summary != null)
+                      _InfoRow(
+                        icon: Icons.map_outlined,
+                        label: summary,
+                      ),
+                    if (!hasAnyInfo)
+                      Text(
+                        'Toque para configurar',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontStyle: FontStyle.italic,
+                            ),
+                      ),
+                  ] else
+                    Text(
+                      'Toque para designar dirigente, local e territórios',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontStyle: FontStyle.italic,
+                          ),
                     ),
+                ],
               ),
-          ],
-        ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Editar designação',
+            onPressed: onTap,
+            icon: Icon(
+              Icons.edit_outlined,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          if (onWhatsapp != null)
+            IconButton(
+              tooltip: 'Mensagem WhatsApp',
+              onPressed: onWhatsapp,
+              icon: const FaIcon(
+                FontAwesomeIcons.whatsapp,
+                size: 22,
+                color: Color(0xFF25D366),
+              ),
+            ),
+        ],
       ),
     );
   }

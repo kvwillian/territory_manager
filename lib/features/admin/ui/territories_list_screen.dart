@@ -47,12 +47,20 @@ class TerritoriesListScreen extends ConsumerWidget {
           ),
           child: ListView(
             padding: const EdgeInsets.all(AppSpacing.screenPadding),
-            children: groups.entries.map((e) {
-              return _NeighborhoodSection(
-                neighborhoodName: e.key,
-                territories: e.value,
-              );
-            }).toList(),
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => context.push('/admin/territories/import'),
+                icon: const Icon(Icons.upload_file_outlined),
+                label: const Text('Importar histórico manual'),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              ...groups.entries.map(
+                (e) => _NeighborhoodSection(
+                  neighborhoodName: e.key,
+                  territories: e.value,
+                ),
+              ),
+            ],
           ),
         );
       },

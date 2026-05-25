@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/constants/congregation_constants.dart';
 import '../models/assignment_model.dart';
+import '../utils/assignment_week_calendar.dart';
 import 'assignment_repository.dart';
 
 const _collection = 'assignments';
@@ -69,11 +70,9 @@ class FirestoreAssignmentRepository implements AssignmentRepository {
 
   @override
   Future<List<AssignmentModel>> getAssignmentsForWeek(DateTime weekStart) async {
-    final weekEnd = weekStart.add(const Duration(days: 7));
     final all = await getAssignments();
     return all
-        .where((a) =>
-            !a.date.isBefore(weekStart) && a.date.isBefore(weekEnd))
+        .where((a) => assignmentDateIsInGridWeek(a.date, weekStart))
         .toList();
   }
 
@@ -98,7 +97,11 @@ class FirestoreAssignmentRepository implements AssignmentRepository {
       'date': Timestamp.fromDate(assignment.date),
       'congregationId': assignment.congregationId ?? _cid,
       'meetingLocationId': assignment.meetingLocationId,
-      'conductorId': assignment.conductorId,
+      'conductorIds': assignment.conductorIds,
+      'conductorId': assignment.conductorIds.isEmpty
+          ? null
+          : assignment.conductorIds.first,
+      'groupId': assignment.groupId,
       'territoryIds': assignment.territoryIds,
       'preachingSessionId': assignment.preachingSessionId,
       'updatedAt': Timestamp.fromDate(now),
@@ -140,15 +143,24 @@ class FirestoreAssignmentRepository implements AssignmentRepository {
     final territoryIds = territoryIdsRaw != null
         ? (territoryIdsRaw as List<dynamic>).map((e) => e as String).toList()
         : <String>[];
+    final conductorIdsRaw = data['conductorIds'] as List<dynamic>?;
+    var conductorIds = conductorIdsRaw != null
+        ? conductorIdsRaw.map((e) => e as String).toList()
+        : <String>[];
+    final legacy = data['conductorId'] as String?;
+    if (conductorIds.isEmpty && legacy != null && legacy.isNotEmpty) {
+      conductorIds = [legacy];
+    }
     return AssignmentModel(
       id: doc.id,
       date: dateTime,
       territoryId: data['territoryId'] as String?,
-      conductorId: data['conductorId'] as String?,
+      conductorIds: conductorIds,
       meetingLocationId: data['meetingLocationId'] as String?,
       territoryIds: territoryIds,
       preachingSessionId: data['preachingSessionId'] as String?,
       congregationId: data['congregationId'] as String? ?? defaultCongregationId,
+      groupId: data['groupId'] as String?,
     );
   }
 }

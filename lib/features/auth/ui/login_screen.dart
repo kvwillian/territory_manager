@@ -189,6 +189,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               )
                             : const Text('Entrar'),
                       ),
+                      const SizedBox(height: AppSpacing.xs),
+                      TextButton(
+                        onPressed: _isLoading
+                            ? null
+                            : () => context.push('/forgot-password'),
+                        child: const Text('Esqueci minha senha'),
+                      ),
                       const SizedBox(height: AppSpacing.sm),
                       TextButton(
                         onPressed: () {

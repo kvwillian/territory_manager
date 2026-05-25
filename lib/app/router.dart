@@ -10,6 +10,7 @@ import 'package:territory_manager/features/admin/ui/create_user_screen.dart';
 import 'package:territory_manager/features/admin/ui/history_screen.dart';
 import 'package:territory_manager/features/admin/ui/territories_list_screen.dart';
 import 'package:territory_manager/features/admin/ui/territory_edit_screen.dart';
+import 'package:territory_manager/features/admin/ui/territory_bulk_import_screen.dart';
 import 'package:territory_manager/features/admin/ui/territory_form_screen.dart';
 import 'package:territory_manager/features/neighborhoods/ui/bairro_edit_screen.dart';
 import 'package:territory_manager/features/neighborhoods/ui/bairro_form_screen.dart';
@@ -18,7 +19,11 @@ import 'package:territory_manager/features/admin/ui/users_list_screen.dart';
 import 'package:territory_manager/features/meetings/ui/meeting_location_edit_screen.dart';
 import 'package:territory_manager/features/meetings/ui/meeting_location_form_screen.dart';
 import 'package:territory_manager/features/meetings/ui/meeting_locations_list_screen.dart';
+import 'package:territory_manager/features/field_groups/ui/field_group_edit_screen.dart';
+import 'package:territory_manager/features/field_groups/ui/field_group_form_screen.dart';
+import 'package:territory_manager/features/field_groups/ui/field_groups_list_screen.dart';
 import 'package:territory_manager/features/auth/providers/auth_provider.dart';
+import 'package:territory_manager/features/auth/ui/forgot_password_screen.dart';
 import 'package:territory_manager/features/auth/ui/login_screen.dart';
 import 'package:territory_manager/features/conductor/ui/home_screen.dart';
 import 'package:territory_manager/features/conductor/ui/history_screen.dart' as conductor;
@@ -52,8 +57,14 @@ String? _parentLocationForBack(String loc) {
     return '/admin/meeting-locations';
   }
   if (loc == '/admin/meeting-locations') return '/admin';
+  if (loc.startsWith('/admin/field-groups/edit/')) {
+    return '/admin/field-groups';
+  }
+  if (loc == '/admin/field-groups/create') return '/admin/field-groups';
+  if (loc == '/admin/field-groups') return '/admin';
   if (loc == '/admin/users/create') return '/admin/users';
   if (loc == '/admin/users') return '/admin';
+  if (loc == '/admin/territories/import') return '/admin/territories';
   if (loc == '/admin/assignments') return '/admin';
   if (loc == '/admin/history') return '/admin';
   if (loc.startsWith('/admin/')) return '/admin';
@@ -71,6 +82,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final authState = ref.read(authStateProvider);
       final loc = state.matchedLocation;
       final isLoggingIn = loc == '/login';
+      final isForgotPassword = loc == '/forgot-password';
 
       // Redirect bare / to /admin or /home based on role
       if (state.uri.path == '/' || state.uri.path.isEmpty) {
@@ -85,14 +97,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       if (authState is AuthAuthenticated) {
-        if (isLoggingIn) {
+        if (isLoggingIn || isForgotPassword) {
           return authState.user.isAdmin ? '/admin' : '/home';
         }
         return null;
       }
 
       if (authState is AuthUnauthenticated) {
-        if (!isLoggingIn) {
+        if (!isLoggingIn && !isForgotPassword) {
           return '/login';
         }
         return null;
@@ -104,6 +116,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (context, state) => const ForgotPasswordScreen(),
       ),
       GoRoute(
         path: '/',
@@ -200,6 +216,24 @@ final routerProvider = Provider<GoRouter>((ref) {
                       ),
                     ],
                   ),
+                  GoRoute(
+                    path: 'field-groups',
+                    builder: (context, state) => const FieldGroupsListScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'create',
+                        builder: (context, state) =>
+                            const FieldGroupFormScreen(),
+                      ),
+                      GoRoute(
+                        path: 'edit/:id',
+                        builder: (context, state) {
+                          final id = state.pathParameters['id']!;
+                          return FieldGroupEditScreen(groupId: id);
+                        },
+                      ),
+                    ],
+                  ),
                 ],
               ),
               GoRoute(
@@ -209,6 +243,10 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: 'admin/territories/create',
                 builder: (context, state) => const CreateTerritoryScreen(),
+              ),
+              GoRoute(
+                path: 'admin/territories/import',
+                builder: (context, state) => const TerritoryBulkImportScreen(),
               ),
               GoRoute(
                 path: 'admin/territories/edit/:id',

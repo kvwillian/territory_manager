@@ -86,6 +86,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (location == '/admin/meeting-locations') return 'Locais de Saída';
     if (location.startsWith('/admin/meeting-locations/create')) return 'Novo Local';
     if (location.startsWith('/admin/meeting-locations/edit/')) return 'Editar Local';
+    if (location == '/admin/field-groups') return 'Grupos de campo';
+    if (location.startsWith('/admin/field-groups/edit/')) return 'Editar grupo';
+    if (location.startsWith('/admin/field-groups/create')) return 'Novo grupo';
     if (location == '/admin/assignments') return 'Designações';
     if (location == '/admin/history') return 'Histórico';
     return 'Gerenciador de Territórios';
@@ -113,6 +116,13 @@ class _AppShellState extends ConsumerState<AppShell> {
         onPressed: () => context.push('/admin/bairros/create'),
         icon: const Icon(Icons.add),
         label: const Text('Novo bairro'),
+      );
+    }
+    if (location == '/admin/field-groups') {
+      return FloatingActionButton.extended(
+        onPressed: () => context.push('/admin/field-groups/create'),
+        icon: const Icon(Icons.add),
+        label: const Text('Novo grupo'),
       );
     }
     return null;
@@ -257,6 +267,7 @@ const _adminItems = [
   _DrawerItem(icon: Icons.map_outlined, label: 'Territórios', path: '/admin/territories'),
   _DrawerItem(icon: Icons.location_city_outlined, label: 'Bairros', path: '/admin/bairros'),
   _DrawerItem(icon: Icons.place_outlined, label: 'Locais de Saída', path: '/admin/meeting-locations'),
+  _DrawerItem(icon: Icons.groups_outlined, label: 'Grupos de campo', path: '/admin/field-groups'),
   _DrawerItem(icon: Icons.person_outline, label: 'Usuários', path: '/admin/users'),
   _DrawerItem(icon: Icons.assignment_outlined, label: 'Designações semanais', path: '/admin/assignments'),
   _DrawerItem(icon: Icons.history, label: 'Histórico', path: '/admin/history'),

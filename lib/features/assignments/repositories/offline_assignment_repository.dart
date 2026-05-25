@@ -5,9 +5,9 @@ import '../../../core/constants/congregation_constants.dart';
 import '../../../core/database/local_repository.dart';
 import '../../../core/services/connectivity_service.dart';
 import '../../../core/services/offline_sync_service.dart';
-import '../../meetings/models/preaching_session_model.dart';
 import '../../meetings/providers/preaching_session_repository_provider.dart';
 import '../models/assignment_model.dart';
+import '../utils/assignment_week_calendar.dart';
 import 'assignment_repository.dart';
 import '../../admin/data/mock_territory_repository.dart';
 
@@ -67,10 +67,8 @@ class OfflineAssignmentRepository implements AssignmentRepository {
   @override
   Future<List<AssignmentModel>> getAssignmentsForWeek(DateTime weekStart) async {
     final all = await getAssignments();
-    final weekEnd = weekStart.add(const Duration(days: 7));
     return all
-        .where((a) =>
-            !a.date.isBefore(weekStart) && a.date.isBefore(weekEnd))
+        .where((a) => assignmentDateIsInGridWeek(a.date, weekStart))
         .toList();
   }
 
@@ -130,23 +128,6 @@ class OfflineAssignmentRepository implements AssignmentRepository {
     }
   }
 
-  static int _dayOffset(DayOfWeek day) {
-    switch (day) {
-      case DayOfWeek.tuesday:
-        return 1;
-      case DayOfWeek.wednesday:
-        return 2;
-      case DayOfWeek.thursday:
-        return 3;
-      case DayOfWeek.friday:
-        return 4;
-      case DayOfWeek.saturday:
-        return 5;
-      case DayOfWeek.sunday:
-        return 6;
-    }
-  }
-
   @override
   Future<void> generateAssignments(DateTime weekStart) async {
     final territories =
@@ -161,14 +142,14 @@ class OfflineAssignmentRepository implements AssignmentRepository {
     var territoryIndex = 0;
     for (var i = 0; i < sessions.length; i++) {
       final session = sessions[i];
-      final date = weekStart.add(Duration(days: _dayOffset(session.dayOfWeek)));
-      final conductorId =
-          session.conductorIds.isNotEmpty ? session.conductorIds.first : null;
+      final date = weekStart.add(
+        Duration(days: dayOffsetFromTuesdayWeekStart(session.dayOfWeek)),
+      );
       final territory = territories[territoryIndex % territories.length];
       final assignment = AssignmentModel(
         id: 'a${DateTime.now().millisecondsSinceEpoch}_$i',
         date: date,
-        conductorId: conductorId,
+        conductorIds: List<String>.from(session.conductorIds),
         meetingLocationId: session.meetingLocationId,
         territoryIds: [territory.id],
         preachingSessionId: session.id,

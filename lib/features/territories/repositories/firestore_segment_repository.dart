@@ -80,6 +80,28 @@ class FirestoreSegmentRepository implements SegmentRepository {
   }
 
   @override
+  Future<void> setSegmentsCompletedWithDates(
+    Map<String, DateTime> segmentIdToWorkedDate,
+  ) async {
+    if (segmentIdToWorkedDate.isEmpty) return;
+    const chunk = 400;
+    final entries = segmentIdToWorkedDate.entries.toList();
+    for (var i = 0; i < entries.length; i += chunk) {
+      final batch = _firestore.batch();
+      final end = i + chunk > entries.length ? entries.length : i + chunk;
+      final slice = entries.sublist(i, end);
+      for (final e in slice) {
+        final ref = _firestore.collection(_collection).doc(e.key);
+        batch.update(ref, {
+          'status': SegmentStatus.completed.name,
+          'lastWorkedDate': Timestamp.fromDate(e.value),
+        });
+      }
+      await batch.commit();
+    }
+  }
+
+  @override
   Future<void> resetSegmentsForTerritory(String territoryId) async {
     final segments = await getSegmentsByTerritory(territoryId);
     final batch = _firestore.batch();

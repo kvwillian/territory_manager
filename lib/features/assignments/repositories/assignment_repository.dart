@@ -1,7 +1,7 @@
 import '../models/assignment_model.dart';
 
 /// Repository for assignment data.
-/// Assignments use: conductorId, meetingLocationId, territoryIds, preachingSessionId.
+/// Assignments use: conductorIds, groupId (Sunday), meetingLocationId, territoryIds.
 abstract class AssignmentRepository {
   Future<List<AssignmentModel>> getAssignments();
   Future<List<AssignmentModel>> getAssignmentsForWeek(DateTime weekStart);

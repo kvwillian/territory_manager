@@ -12,6 +12,8 @@ A Flutter mobile application for congregation territory management. Helps conduc
 - **Offline support** – Full offline persistence; territories, segments, meeting locations, and preaching sessions cached locally
 - **Image caching** – Territory images cached locally for fast loading and offline access
 - **Roles** – Admin (full management) and Conductor (view assigned territory, save progress)
+- **Self-service password reset** – Request a new random password by email; it only applies after confirming via the link in the message (Cloud Functions + optional [Resend](https://resend.com))
+- **Bulk territory history import** – Paste CSV (`docs/territorio_importacao_csv.md`) or free-text list to align manual records with segment completion and work sessions
 
 ## Tech Stack
 
@@ -54,6 +56,18 @@ A Flutter mobile application for congregation territory management. Helps conduc
 ### Demo Mode
 
 Use **Demo** or **Demo Admin** on the login screen to explore the app without Firebase. Demo data is in-memory only.
+
+### Self-service password reset (Firebase)
+
+The app can send a **provisional password** by email; the Firebase account password changes only after the user opens the confirmation link (button **Confirmar alteração** in the email).
+
+1. Deploy Cloud Functions (`functions/`), including `requestPasswordReset` (callable) and `confirmPasswordReset` (HTTP).
+2. In **Google Cloud Console** → **Cloud Functions**, for each of those functions:
+   - **Runtime environment variables**: set `RESEND_API_KEY` (required in production). Optionally set `RESEND_FROM_EMAIL` (e.g. `Nome <noreply@yourdomain.com>`; Resend’s test sender is used if unset).
+   - **Permissions**: grant **Cloud Functions Invoker** to **allUsers** so unauthenticated app users can call the callable and browsers can open the confirmation URL.
+3. If confirmation links use the wrong region/URL, set `PASSWORD_RESET_CONFIRM_BASE_URL` to the full base of the HTTP function, e.g. `https://REGION-PROJECT_ID.cloudfunctions.net/confirmPasswordReset` (no `?token=`; the backend appends the token).
+
+With the Firebase emulator, you can put `RESEND_API_KEY` in `functions/.env` — it is loaded automatically via `dotenv`. If the key is empty, the callable still succeeds and logs the confirmation URL (see function logs) for local testing.
 
 ## Project Structure
 

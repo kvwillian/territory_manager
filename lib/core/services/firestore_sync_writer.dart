@@ -85,7 +85,11 @@ class FirestoreSyncWriter {
       'date': Timestamp.fromDate(assignment.date),
       'congregationId': assignment.congregationId ?? _cid,
       'meetingLocationId': assignment.meetingLocationId,
-      'conductorId': assignment.conductorId,
+      'conductorIds': assignment.conductorIds,
+      'conductorId': assignment.conductorIds.isEmpty
+          ? null
+          : assignment.conductorIds.first,
+      'groupId': assignment.groupId,
       'territoryIds': assignment.territoryIds,
       'preachingSessionId': assignment.preachingSessionId,
       'createdAt': Timestamp.fromDate(now),
@@ -103,7 +107,11 @@ class FirestoreSyncWriter {
       'date': Timestamp.fromDate(assignment.date),
       'congregationId': assignment.congregationId ?? _cid,
       'meetingLocationId': assignment.meetingLocationId,
-      'conductorId': assignment.conductorId,
+      'conductorIds': assignment.conductorIds,
+      'conductorId': assignment.conductorIds.isEmpty
+          ? null
+          : assignment.conductorIds.first,
+      'groupId': assignment.groupId,
       'territoryIds': assignment.territoryIds,
       'preachingSessionId': assignment.preachingSessionId,
       'updatedAt': Timestamp.fromDate(DateTime.now()),
