@@ -73,6 +73,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   String _titleForLocation(String location) {
     if (location == '/home') return 'Início';
     if (location == '/history') return 'Histórico';
+    if (location == '/congregation') return 'Reuniões';
     if (location.startsWith('/territory/')) return 'Território';
     if (location == '/admin') return 'Painel';
     if (location == '/admin/territories') return 'Territórios';
@@ -264,6 +265,7 @@ class _AppDrawer extends StatelessWidget {
 
 const _adminItems = [
   _DrawerItem(icon: Icons.dashboard_outlined, label: 'Painel', path: '/admin'),
+  _DrawerItem(icon: Icons.event_outlined, label: 'Reuniões', path: '/congregation'),
   _DrawerItem(icon: Icons.map_outlined, label: 'Territórios', path: '/admin/territories'),
   _DrawerItem(icon: Icons.location_city_outlined, label: 'Bairros', path: '/admin/bairros'),
   _DrawerItem(icon: Icons.place_outlined, label: 'Locais de Saída', path: '/admin/meeting-locations'),
@@ -275,6 +277,7 @@ const _adminItems = [
 
 const _conductorItems = [
   _DrawerItem(icon: Icons.home_outlined, label: 'Início', path: '/home'),
+  _DrawerItem(icon: Icons.event_outlined, label: 'Reuniões', path: '/congregation'),
   _DrawerItem(icon: Icons.history, label: 'Histórico', path: '/history'),
 ];
 

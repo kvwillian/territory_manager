@@ -25,8 +25,11 @@ import 'package:territory_manager/features/field_groups/ui/field_groups_list_scr
 import 'package:territory_manager/features/auth/providers/auth_provider.dart';
 import 'package:territory_manager/features/auth/ui/forgot_password_screen.dart';
 import 'package:territory_manager/features/auth/ui/login_screen.dart';
+import 'package:territory_manager/features/onboarding/ui/create_account_placeholder_screen.dart';
+import 'package:territory_manager/features/onboarding/ui/onboarding_welcome_screen.dart';
 import 'package:territory_manager/features/conductor/ui/home_screen.dart';
 import 'package:territory_manager/features/conductor/ui/history_screen.dart' as conductor;
+import 'package:territory_manager/features/congregations/ui/congregation_schedule_screen.dart';
 import 'package:territory_manager/features/conductor/ui/territory_screen.dart';
 import 'package:territory_manager/shared/widgets/shell_route_config.dart';
 
@@ -44,6 +47,7 @@ class _AuthRefreshNotifier extends ChangeNotifier {
 String? _parentLocationForBack(String loc) {
   if (loc.startsWith('/territory/')) return '/home';
   if (loc == '/history') return '/home';
+  if (loc == '/congregation') return '/home';
   if (loc.startsWith('/admin/territories/edit/')) return '/admin/territories';
   if (loc == '/admin/territories/create') return '/admin/territories';
   if (loc == '/admin/territories') return '/admin';
@@ -83,6 +87,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final loc = state.matchedLocation;
       final isLoggingIn = loc == '/login';
       final isForgotPassword = loc == '/forgot-password';
+      final isOnboarding = loc == '/onboarding' || loc.startsWith('/onboarding/');
 
       // Redirect bare / to /admin or /home based on role
       if (state.uri.path == '/' || state.uri.path.isEmpty) {
@@ -107,7 +112,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       if (authState is AuthUnauthenticated) {
-        if (!isLoggingIn && !isForgotPassword) {
+        if (!isLoggingIn && !isForgotPassword && !isOnboarding) {
           return '/login';
         }
         return null;
@@ -123,6 +128,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/forgot-password',
         builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding',
+        builder: (context, state) => const OnboardingWelcomeScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding/account',
+        builder: (context, state) => const CreateAccountPlaceholderScreen(),
       ),
       GoRoute(
         path: '/',
@@ -177,6 +190,13 @@ final routerProvider = Provider<GoRouter>((ref) {
                 builder: (context, state) => const ShellRouteConfig(
                   title: 'Histórico',
                   child: conductor.ConductorHistoryScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'congregation',
+                builder: (context, state) => const ShellRouteConfig(
+                  title: 'Reuniões',
+                  child: CongregationScheduleScreen(),
                 ),
               ),
               GoRoute(

@@ -37,6 +37,26 @@ class FirestoreCongregationRepository implements CongregationRepository {
     );
   }
 
+  @override
+  Future<void> saveMeetingSchedule({
+    required String id,
+    required int midweekWeekday,
+    required String midweekTime,
+    required int weekendWeekday,
+    required String weekendTime,
+  }) async {
+    _requireWeekday(midweekWeekday);
+    _requireWeekday(weekendWeekday);
+    _requireTime(midweekTime);
+    _requireTime(weekendTime);
+    await _firestore.collection(_collection).doc(id).update({
+      'midweekWeekday': midweekWeekday,
+      'midweekTime': midweekTime,
+      'weekendWeekday': weekendWeekday,
+      'weekendTime': weekendTime,
+    });
+  }
+
   CongregationModel _docToCongregation(
     DocumentSnapshot<Map<String, dynamic>> doc,
   ) {
@@ -48,6 +68,23 @@ class FirestoreCongregationRepository implements CongregationRepository {
       country: data['country'] as String,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       createdBy: data['createdBy'] as String?,
+      midweekWeekday: congregationWeekday(data['midweekWeekday']),
+      midweekTime: data['midweekTime'] as String?,
+      weekendWeekday: congregationWeekday(data['weekendWeekday']),
+      weekendTime: data['weekendTime'] as String?,
     );
+  }
+}
+
+void _requireWeekday(int day) {
+  if (day < DateTime.monday || day > DateTime.sunday) {
+    throw ArgumentError('Dia da semana inválido');
+  }
+}
+
+void _requireTime(String value) {
+  final match = RegExp(r'^([01]\d|2[0-3]):[0-5]\d$').hasMatch(value);
+  if (!match) {
+    throw ArgumentError('Horário inválido');
   }
 }

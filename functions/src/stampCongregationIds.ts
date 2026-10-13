@@ -7,6 +7,8 @@
  *   npm run stamp-congregation-ids
  *   npm run stamp-congregation-ids -- --dry-run
  */
+import * as fs from "fs";
+import * as path from "path";
 import * as admin from "firebase-admin";
 
 const DEFAULT_CONGREGATION_ID = "default";
@@ -22,6 +24,24 @@ const COLLECTIONS = [
   "fieldGroups",
   "preachingSessions",
 ];
+
+function projectId(): string {
+  const fromEnv = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
+  if (fromEnv && fromEnv.trim() !== "") {
+    return fromEnv.trim();
+  }
+  const rcPath = path.join(__dirname, "..", "..", ".firebaserc");
+  const rc = JSON.parse(fs.readFileSync(rcPath, "utf8")) as {
+    projects?: { default?: string };
+  };
+  const id = rc.projects?.default?.trim();
+  if (!id) {
+    throw new Error(
+      "Id do projeto ausente. Defina GOOGLE_CLOUD_PROJECT ou projects.default em .firebaserc.",
+    );
+  }
+  return id;
+}
 
 function needsStamp(value: unknown): boolean {
   return typeof value !== "string" || value.trim() === "";
@@ -62,8 +82,10 @@ async function stampCollection(
 
 async function main(): Promise<void> {
   const dryRun = process.argv.includes("--dry-run");
-  admin.initializeApp();
+  const id = projectId();
+  admin.initializeApp({ projectId: id });
   const db = admin.firestore();
+  console.log(`Projeto: ${id}`);
 
   console.log(
     dryRun
