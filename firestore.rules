@@ -1,103 +1,139 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper: get current user's congregationId from users collection.
-    // Use exists() before get() to avoid null evaluation when doc is missing
-    // (e.g. right after Cloud Function creates user, before propagation).
-    function userCongregationId() {
-      let path = /databases/$(database)/documents/users/$(request.auth.uid);
-      return exists(path)
-        && get(path).data != null
-        && get(path).data.congregationId != null
-        ? get(path).data.congregationId
-        : 'default';
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // Helper: resource belongs to user's congregation (or has no congregationId for backward compat)
-    // Use 'is string' to avoid type mismatch (e.g. if congregationId was stored as number)
-    function resourceInUserCongregation(resource) {
-      let cid = resource.data.congregationId;
-      let resourceCid = (cid != null && cid is string && cid != '')
-        ? cid
-        : 'default';
-      return resourceCid == userCongregationId();
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function hasProfile() {
+      return isSignedIn() && exists(userPath());
+    }
+
+    function profile() {
+      return get(userPath()).data;
+    }
+
+    function isAdmin() {
+      return hasProfile()
+        && profile().role == 'admin'
+        && profile().congregationId is string
+        && profile().congregationId.size() > 0;
+    }
+
+    // congregationId tem de ser string não vazia e igual à do usuário.
+    // Documento sem o campo não entra em congregação nenhuma.
+    function inCongregation(data) {
+      return hasProfile()
+        && data.congregationId is string
+        && data.congregationId.size() > 0
+        && data.congregationId == profile().congregationId;
+    }
+
+    function keepsCongregation() {
+      return request.resource.data.congregationId == resource.data.congregationId;
+    }
+
+    function adminWritesConfig() {
+      return isAdmin() && inCongregation(resource.data) && keepsCongregation();
+    }
+
+    function adminCreates() {
+      return isAdmin() && inCongregation(request.resource.data);
+    }
+
+    function segmentProgressOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['status', 'lastWorkedDate']);
     }
 
     match /congregations/{congregationId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
-    }
-
-    match /territories/{territoryId} {
-      allow read, update, delete: if request.auth != null
-        && resourceInUserCongregation(resource);
-      allow create: if request.auth != null
-        && (request.resource.data.congregationId == userCongregationId()
-            || request.resource.data.congregationId == null);
-    }
-
-    match /segments/{segmentId} {
-      allow read, update, delete: if request.auth != null
-        && resourceInUserCongregation(resource);
-      allow create: if request.auth != null
-        && (request.resource.data.congregationId == userCongregationId()
-            || request.resource.data.congregationId == null);
+      allow read: if hasProfile()
+        && congregationId == profile().congregationId;
+      allow update: if isAdmin()
+        && congregationId == profile().congregationId;
+      allow create, delete: if false;
     }
 
     match /users/{userId} {
-      allow read: if request.auth != null
-        && (userId == request.auth.uid
-            || resource.data.congregationId == userCongregationId()
-            || (resource.data.congregationId == null && userCongregationId() == 'default'));
-      allow create: if request.auth != null;
-      allow update, delete: if request.auth != null
-        && (userId == request.auth.uid
-            || resourceInUserCongregation(resource));
+      allow get: if hasProfile() && (
+        userId == request.auth.uid
+        || inCongregation(resource.data)
+      );
+      allow list: if inCongregation(resource.data);
+      allow create: if false;
+      allow update: if hasProfile()
+        && request.resource.data.role == resource.data.role
+        && keepsCongregation()
+        && (
+          userId == request.auth.uid
+          || (isAdmin() && inCongregation(resource.data))
+        );
+      allow delete: if isAdmin() && inCongregation(resource.data);
     }
 
-    match /assignments/{assignmentId} {
-      // TEMP: relaxed for debugging - allow all auth'd read/write (like /congregations)
-      allow read, write: if request.auth != null;
+    match /territories/{territoryId} {
+      allow read: if inCongregation(resource.data);
+      allow create: if adminCreates();
+      allow update: if adminWritesConfig();
+      allow delete: if isAdmin() && inCongregation(resource.data);
     }
 
-    match /workSessions/{sessionId} {
-      allow read, update, delete: if request.auth != null
-        && resourceInUserCongregation(resource);
-      allow create: if request.auth != null
-        && (request.resource.data.congregationId == userCongregationId()
-            || request.resource.data.congregationId == null);
+    match /segments/{segmentId} {
+      allow read: if inCongregation(resource.data);
+      allow create: if adminCreates();
+      allow update: if inCongregation(resource.data)
+        && keepsCongregation()
+        && (isAdmin() || segmentProgressOnly());
+      allow delete: if isAdmin() && inCongregation(resource.data);
     }
 
     match /neighborhoods/{neighborhoodId} {
-      allow read, update, delete: if request.auth != null
-        && resourceInUserCongregation(resource);
-      allow create: if request.auth != null
-        && (request.resource.data.congregationId == userCongregationId()
-            || request.resource.data.congregationId == null);
+      allow read: if inCongregation(resource.data);
+      allow create: if adminCreates();
+      allow update: if adminWritesConfig();
+      allow delete: if isAdmin() && inCongregation(resource.data);
     }
 
     match /meetingLocations/{locationId} {
-      allow read, update, delete: if request.auth != null
-        && resourceInUserCongregation(resource);
-      allow create: if request.auth != null
-        && (request.resource.data.congregationId == userCongregationId()
-            || request.resource.data.congregationId == null);
+      allow read: if inCongregation(resource.data);
+      allow create: if adminCreates();
+      allow update: if adminWritesConfig();
+      allow delete: if isAdmin() && inCongregation(resource.data);
     }
 
     match /fieldGroups/{groupId} {
-      allow read, update, delete: if request.auth != null
-        && resourceInUserCongregation(resource);
-      allow create: if request.auth != null
-        && (request.resource.data.congregationId == userCongregationId()
-            || request.resource.data.congregationId == null);
+      allow read: if inCongregation(resource.data);
+      allow create: if adminCreates();
+      allow update: if adminWritesConfig();
+      allow delete: if isAdmin() && inCongregation(resource.data);
     }
 
     match /preachingSessions/{sessionId} {
-      allow read, update, delete: if request.auth != null
-        && resourceInUserCongregation(resource);
-      allow create: if request.auth != null
-        && (request.resource.data.congregationId == userCongregationId()
-            || request.resource.data.congregationId == null);
+      allow read: if inCongregation(resource.data);
+      allow create: if adminCreates();
+      allow update: if adminWritesConfig();
+      allow delete: if isAdmin() && inCongregation(resource.data);
+    }
+
+    match /assignments/{assignmentId} {
+      allow read: if inCongregation(resource.data);
+      allow create: if adminCreates();
+      allow update: if adminWritesConfig();
+      allow delete: if isAdmin() && inCongregation(resource.data);
+    }
+
+    match /workSessions/{sessionId} {
+      allow read: if inCongregation(resource.data);
+      allow create: if inCongregation(request.resource.data)
+        && (
+          isAdmin()
+          || request.resource.data.conductorId == request.auth.uid
+        );
+      allow update, delete: if false;
     }
 
     // Apenas Cloud Functions (Admin SDK). Clientes nunca acedem.

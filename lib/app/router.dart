@@ -100,6 +100,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         if (isLoggingIn || isForgotPassword) {
           return authState.user.isAdmin ? '/admin' : '/home';
         }
+        if (loc.startsWith('/admin') && !authState.user.isAdmin) {
+          return '/home';
+        }
         return null;
       }
 

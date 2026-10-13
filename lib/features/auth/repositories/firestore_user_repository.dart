@@ -42,20 +42,9 @@ class FirestoreUserRepository implements UserRepository {
     required UserRole role,
     String? congregationId,
   }) async {
-    final docRef = _firestore.collection(_collection).doc();
-    final id = docRef.id;
-    final cid = congregationId ?? _effectiveCongregationId;
-
-    final user = UserModel(
-      id: id,
-      name: name,
-      role: role,
-      email: email,
-      congregationId: cid,
+    throw UnsupportedError(
+      'Criar usuário no Firestore só pela Cloud Function createUser',
     );
-    await docRef.set(user.toMap());
-
-    return user;
   }
 
   @override
@@ -64,7 +53,10 @@ class FirestoreUserRepository implements UserRepository {
     final doc = await docRef.get();
     if (!doc.exists) throw StateError('User not found');
 
-    await docRef.update(user.toMap());
+    await docRef.update({
+      'name': user.name,
+      'email': user.email,
+    });
 
     return user;
   }

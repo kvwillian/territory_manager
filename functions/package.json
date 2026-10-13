@@ -7,6 +7,7 @@
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
+    "stamp-congregation-ids": "npm run build && node lib/stampCongregationIds.js",
     "logs": "firebase functions:log"
   },
   "engines": {

@@ -39,11 +39,22 @@ export const createUser = functions.https.onCall(async (data: CreateUserRequest,
     throw new functions.https.HttpsError("permission-denied", "Only admins can create users");
   }
 
-  // Prefer congregationId from client (admin's current congregation), fallback to admin's doc
+  // A congregação vem do perfil do admin. O cliente não escolhe outra.
+  const callerCongregation = callerDoc.data()?.congregationId;
   const congregationId =
-    (data.congregationId && data.congregationId.trim() !== "")
-      ? data.congregationId.trim()
-      : (callerDoc.data()?.congregationId ?? DEFAULT_CONGREGATION_ID);
+    typeof callerCongregation === "string" && callerCongregation.trim() !== ""
+      ? callerCongregation.trim()
+      : DEFAULT_CONGREGATION_ID;
+  if (
+    data.congregationId &&
+    data.congregationId.trim() !== "" &&
+    data.congregationId.trim() !== congregationId
+  ) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Não é possível criar usuário em outra congregação",
+    );
+  }
 
   const { email, password, name, role } = data;
   if (!email || !password || !name || !role) {
