@@ -77,7 +77,7 @@ export const processMeetingImport = functions
   .https.onCall(async (data: { importId?: string }, context) => {
     const manager = await requireManager(context)
     const importId = readImportId(data?.importId)
-    const path = importFilePath(manager.congregationId, importId)
+    const path = importFilePath(manager.uid, importId)
     const file = storage().file(path)
     const [exists] = await file.exists()
     if (!exists) {
@@ -300,7 +300,7 @@ export const cancelMeetingImport = functions.https.onCall(async (data: { importI
   if (snapshot.exists && snapshot.data()?.congregationId !== manager.congregationId) {
     throw new functions.https.HttpsError("permission-denied", "Esta importação é de outra congregação.")
   }
-  const path = importFilePath(manager.congregationId, importId)
+  const path = importFilePath(manager.uid, importId)
   const fileDeleted = await removeFile(path)
   if (snapshot.exists) await ref.delete()
   return { cancelled: true, fileDeleted }
@@ -324,9 +324,9 @@ export const cleanupMeetingImportFiles = functions.pubsub.schedule("every 60 min
     imports.docs.map(async (doc) => {
       const createdAt = doc.data().createdAt?.toDate?.() as Date | undefined
       if (!createdAt || !isExpired(createdAt.getTime(), now, IMPORT_TTL_MS)) return
-      const congregationId = doc.data().congregationId
-      if (typeof congregationId === "string") {
-        await removeFile(importFilePath(congregationId, doc.id))
+      const createdBy = doc.data().createdBy
+      if (typeof createdBy === "string") {
+        await removeFile(importFilePath(createdBy, doc.id))
       }
       await doc.ref.delete()
     }),

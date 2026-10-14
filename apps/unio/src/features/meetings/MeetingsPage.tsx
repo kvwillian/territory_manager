@@ -35,12 +35,12 @@ import { ImportFlow } from './ImportFlow'
 
 const sectionMeta: Record<
   SectionToken,
-  { colorLabel: string; header: string; accent: string; icon: typeof Gem }
+  { header: string; accent: string; icon: typeof Gem }
 > = {
-  treasures: { colorLabel: 'Cor cinza', header: 'bg-[#E8EDF4]', accent: 'text-[#475569]', icon: Gem },
-  ministry: { colorLabel: 'Cor âmbar', header: 'bg-[#FEF3E2]', accent: 'text-[#B45309]', icon: Leaf },
-  christianLife: { colorLabel: 'Cor vinho', header: 'bg-[#FDE8EF]', accent: 'text-[#9F1239]', icon: Users },
-  neutral: { colorLabel: '', header: 'bg-[#F8FAFC]', accent: 'text-indigo', icon: BookOpen },
+  treasures: {  header: 'bg-[#E8EDF4]', accent: 'text-[#475569]', icon: Gem },
+  ministry: { header: 'bg-[#FEF3E2]', accent: 'text-[#B45309]', icon: Leaf },
+  christianLife: { header: 'bg-[#FDE8EF]', accent: 'text-[#9F1239]', icon: Users },
+  neutral: {  header: 'bg-[#F8FAFC]', accent: 'text-indigo', icon: BookOpen },
 }
 
 const statusClass: Record<MeetingStatus, string> = {
@@ -328,7 +328,6 @@ function SectionBlock({ section, startAt }: { section: MeetingSection; startAt: 
           </span>
           <span className="block text-xs text-muted">
             {section.parts.length} {section.parts.length === 1 ? 'parte' : 'partes'}
-            {meta.colorLabel ? ` · ${meta.colorLabel}` : ''}
           </span>
         </span>
         <ChevronDown size={16} className={`text-muted transition ${closed ? '-rotate-90' : ''}`} />

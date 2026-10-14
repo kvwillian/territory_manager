@@ -1,30 +1,16 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    function signedIn() {
-      return request.auth != null;
-    }
-
-    function userData() {
-      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
-    }
-
-    function managesMeetings(congregationId) {
-      return signedIn()
-        && userData().congregationId == congregationId
-        && (
-          userData().role == 'admin'
-          || (userData().manageFlags is list && 'meetings' in userData().manageFlags)
-        );
-    }
-
-    match /meeting-imports/{congregationId}/{importId}/{fileName} {
+    match /meeting-imports/{userId}/{importId}/{fileName} {
       allow read: if false;
-      allow create, update: if managesMeetings(congregationId)
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
         && fileName == 'source.pdf'
         && request.resource.size < 8 * 1024 * 1024
         && request.resource.contentType == 'application/pdf';
-      allow delete: if managesMeetings(congregationId) && fileName == 'source.pdf';
+      allow delete: if request.auth != null
+        && request.auth.uid == userId
+        && fileName == 'source.pdf';
     }
 
     match /{allPaths=**} {

@@ -18,6 +18,7 @@ import {
 } from "../src/meetingWorkbook/policy"
 
 const PDF = "C:/Users/kevin/Downloads/mwb_T_202609.pdf"
+const NOVEMBER = "C:/Users/kevin/Downloads/mwb_T_202611.pdf"
 
 test("parser reads a wrapped part and ignores the lesson text", () => {
   const parsed = parseWorkbookLines(
@@ -102,6 +103,32 @@ test("september-october 2026 workbook", async () => {
   assert.equal(oct19.alerts.filter((alert) => /duração|seções|Estudo/.test(alert)).length, 0)
 })
 
+test("november-december 2026 workbook keeps one week per program", async () => {
+  assert.equal(existsSync(NOVEMBER), true, "PDF de novembro ausente")
+  const bytes = readFileSync(NOVEMBER)
+  const lines = await linesFromPdf(new Uint8Array(bytes))
+  const parsed = parseWorkbookLines(lines)
+  const starts = parsed.weeks.map((week) => week.weekStart)
+  assert.deepEqual(starts, [
+    "2026-11-02",
+    "2026-11-09",
+    "2026-11-16",
+    "2026-11-23",
+    "2026-11-30",
+    "2026-12-07",
+    "2026-12-14",
+    "2026-12-21",
+    "2026-12-28",
+  ])
+  for (const week of parsed.weeks) {
+    assert.equal(week.sections[2].parts.length > 0, true, week.label)
+    assert.match(week.sections[2].parts.at(-1)?.title ?? "", /Estudo bíblico de congregação/)
+    assert.equal(week.alerts.some((alert) => alert.includes("Nossa Vida Cristã")), false, week.alerts.join(" "))
+  }
+  assert.equal(parsed.weeks[1].weekStart, "2026-11-09")
+  assert.equal(parsed.weeks[5].weekStart, "2026-12-07")
+})
+
 test("permissions and file guards", () => {
   assert.equal(canManageMeetings(null), false)
   assert.equal(canManageMeetings({ role: "conductor", congregationId: "central" }), false)
@@ -113,8 +140,8 @@ test("permissions and file guards", () => {
   assert.equal(callerCongregationId({ role: "admin", congregationId: "central" }), "central")
   assert.throws(() => assertImportId("../other"), /inválido/)
   assert.equal(
-    importFilePath("central", "abcd1234"),
-    "meeting-imports/central/abcd1234/source.pdf",
+    importFilePath("user-1", "abcd1234"),
+    "meeting-imports/user-1/abcd1234/source.pdf",
   )
   assert.throws(() => assertPdfPayload(MAX_PDF_BYTES + 1, new Uint8Array([0x25, 0x50, 0x44, 0x46])), /8 MB/)
   assert.throws(() => assertPdfPayload(20, new Uint8Array([1, 2, 3, 4])), /não é um PDF/)

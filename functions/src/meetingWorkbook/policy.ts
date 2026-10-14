@@ -35,11 +35,11 @@ export function assertImportId(importId: unknown) {
   return importId
 }
 
-export function importFilePath(congregationId: string, importId: string) {
-  if (!congregationId || congregationId.includes("/") || congregationId.includes("..")) {
-    throw new Error("Congregação inválida.")
+export function importFilePath(uid: string, importId: string) {
+  if (!uid || uid.includes("/") || uid.includes("..")) {
+    throw new Error("Usuário inválido.")
   }
-  return `meeting-imports/${congregationId}/${assertImportId(importId)}/source.pdf`
+  return `meeting-imports/${uid}/${assertImportId(importId)}/source.pdf`
 }
 
 export function assertPdfPayload(bytes: number, header: Uint8Array) {

@@ -83,47 +83,98 @@ export function findWorkbookYear(lines: string[]) {
 
 type WeekHit = {
   index: number
+  endIndex: number
   label: string
   weekStart: string | null
   weekEnd: string | null
 }
 
+function loosenDates(folded: string) {
+  return folded
+    .replace(
+      /de(?=janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)/g,
+      "de ",
+    )
+    .replace(/(\d)\s+ude\s+/g, "$1 de ")
+}
+
+function weekSpan(start: string | null, endDay: number, endMonth: number, year: number) {
+  if (!start) return null
+  let endYear = year
+  const startMonth = Number(start.slice(5, 7)) - 1
+  if (endMonth < startMonth) endYear += 1
+  const end = isoDate(endYear, endMonth, endDay)
+  if (!end) return null
+  return addDays(start, 6) === end ? end : null
+}
+
+function peelPageNumber(dayText: string) {
+  const candidates = [dayText]
+  if (dayText.length > 1) candidates.push(dayText.slice(1))
+  if (dayText.length > 2) candidates.push(dayText.slice(2))
+  return candidates
+}
+
 function weekHits(lines: string[], year: number | null): WeekHit[] {
   const hits: WeekHit[] = []
-  const sameMonth = new RegExp(
-    `(\\d{1,2})\\s+(\\d{1,2})\\s+de\\s+(${MONTHS.join("|")})`,
-    "i",
-  )
+  const monthPattern = MONTHS.join("|")
+  const sameMonth = new RegExp(`^(\\d{1,3})\\s+(\\d{1,2})\\s+de\\s+(${monthPattern})`, "i")
   const crossMonth = new RegExp(
-    `(\\d{1,2})\\s+de\\s+(${MONTHS.join("|")})\\s+(\\d{1,2})(?:\\s+[a-z])?\\s+de\\s+(${MONTHS.join("|")})`,
+    `^(\\d{1,3})\\s+de\\s+(${monthPattern})\\s+(\\d{1,2})\\s+de\\s+(${monthPattern})`,
     "i",
   )
   lines.forEach((line, index) => {
-    const folded = fold(line)
-      .replace(
-        /de(?=janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)/g,
-        "de ",
-      )
-      .replace(/(\d)\s+ude\s+/g, "$1 de ")
+    if (!year) return
+    const folded = loosenDates(fold(line))
     const cross = folded.match(crossMonth)
-    if (cross && year) {
-      const startMonth = monthIndex(cross[2])
+    if (cross) {
       const endMonth = monthIndex(cross[4])
-      const weekStart = isoDate(year, startMonth, Number(cross[1]))
-      let endYear = year
-      if (endMonth < startMonth) endYear += 1
-      const weekEnd = isoDate(endYear, endMonth, Number(cross[3]))
-      hits.push({ index, label: line.trim(), weekStart, weekEnd })
-      return
+      for (const startText of peelPageNumber(cross[1])) {
+        const startMonth = monthIndex(cross[2])
+        const start = isoDate(year, startMonth, Number(startText))
+        const end = weekSpan(start, Number(cross[3]), endMonth, year)
+        if (start && end) {
+          hits.push({ index, endIndex: lines.length, label: line.trim(), weekStart: start, weekEnd: end })
+          return
+        }
+      }
     }
     const same = folded.match(sameMonth)
     if (!same) return
     const month = monthIndex(same[3])
-    const start = year ? isoDate(year, month, Number(same[1])) : null
-    const end = start ? addDays(start, Number(same[2]) - Number(same[1])) : null
-    hits.push({ index, label: line.trim(), weekStart: start, weekEnd: end })
+    for (const startText of peelPageNumber(same[1])) {
+      const start = isoDate(year, month, Number(startText))
+      const end = weekSpan(start, Number(same[2]), month, year)
+      if (start && end) {
+        hits.push({ index, endIndex: lines.length, label: line.trim(), weekStart: start, weekEnd: end })
+        return
+      }
+    }
   })
   return hits
+    .map((hit, hitIndex) => ({ ...hit, endIndex: hits[hitIndex + 1]?.index ?? lines.length }))
+    .filter((hit) => bodyHasTreasures(lines.slice(hit.index + 1, hit.endIndex)))
+}
+
+function isHeaderFragment(line: string) {
+  const letters = line.replace(/[^A-Za-zÀ-ÿ]/g, "")
+  if (letters.length < 4 || letters.length > 48) return false
+  const upper = letters.replace(/[^A-ZÁÉÍÓÚÃÕÇ]/g, "")
+  return upper.length / letters.length > 0.8
+}
+
+function bodyHasTreasures(lines: string[]) {
+  let header = ""
+  for (const line of lines) {
+    if (!isHeaderFragment(line)) {
+      header = ""
+      continue
+    }
+    header = `${header} ${line}`.trim()
+    if (sectionToken(header) === "treasures") return true
+    if (header.length > 80) header = ""
+  }
+  return false
 }
 
 function sectionToken(line: string): SectionToken | null {
@@ -199,8 +250,7 @@ export function parseWorkbookLines(lines: string[], knownYear?: number | null): 
     }
   }
   const weeks = hits.map((hit, hitIndex) => {
-    const next = hits[hitIndex + 1]?.index ?? lines.length
-    const body = lines.slice(hit.index + 1, next)
+    const body = lines.slice(hit.index + 1, hit.endIndex)
     const sections = emptySections()
     const weekAlerts: string[] = []
     let current: SectionToken | null = null
@@ -214,15 +264,19 @@ export function parseWorkbookLines(lines: string[], knownYear?: number | null): 
       bucket = []
     }
     for (const line of body) {
-      pendingHeader = `${pendingHeader} ${line}`.replace(/\s+/g, " ").trim()
-      const token = sectionToken(pendingHeader)
-      if (token) {
-        flush()
-        current = token
-        pendingHeader = ""
+      if (isHeaderFragment(line)) {
+        pendingHeader = `${pendingHeader} ${line}`.replace(/\s+/g, " ").trim()
+        const token = sectionToken(pendingHeader)
+        if (token) {
+          flush()
+          current = token
+          pendingHeader = ""
+        } else if (pendingHeader.length > 80) {
+          pendingHeader = line
+        }
         continue
       }
-      if (pendingHeader.length > 100 || /^\d+\./.test(line)) pendingHeader = ""
+      pendingHeader = ""
       if (current) bucket.push(line)
     }
     flush()
