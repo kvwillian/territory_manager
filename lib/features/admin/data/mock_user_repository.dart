@@ -63,6 +63,13 @@ class MockUserRepository implements UserRepository {
   }
 
   @override
+  Future<void> updateAccessFlags(String id, List<String> flags) async {
+    final index = _users.indexWhere((user) => user.id == id);
+    if (index < 0) throw StateError('User not found');
+    _users[index] = _users[index].copyWith(accessFlags: flags);
+  }
+
+  @override
   Future<void> deleteUser(String id) async {
     _users.removeWhere((u) => u.id == id);
   }

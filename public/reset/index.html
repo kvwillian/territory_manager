@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Nova senha</title>
+  <style>
+    body{font-family:system-ui,-apple-system,sans-serif;max-width:36rem;margin:2.5rem auto;padding:0 1.2rem;color:#222;line-height:1.5}
+    h1{font-size:1.35rem}
+    label{display:block;margin:1rem 0 .35rem}
+    input{width:100%;box-sizing:border-box;padding:.7rem;font-size:1rem}
+    button{margin-top:1.2rem;background:#0d6efd;color:#fff;border:0;border-radius:8px;padding:.8rem 1.2rem;font-size:1rem;font-weight:600}
+    .error{color:#b02a37}
+    .ok{color:#0d6efd}
+  </style>
+</head>
+<body>
+  <h1 id="title">Escolha uma nova senha</h1>
+  <p id="message">A senha do aplicativo só muda depois que você enviar este formulário.</p>
+  <p id="error" class="error" hidden></p>
+  <form id="form">
+    <label for="password">Nova senha</label>
+    <input id="password" name="password" type="password" minlength="6" required autocomplete="new-password"/>
+    <label for="confirm">Confirmar senha</label>
+    <input id="confirm" name="confirm" type="password" minlength="6" required autocomplete="new-password"/>
+    <button type="submit">Definir senha</button>
+  </form>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const oobCode = params.get("oobCode");
+    const apiKey = params.get("apiKey");
+    const mode = params.get("mode");
+    const form = document.getElementById("form");
+    const error = document.getElementById("error");
+    const title = document.getElementById("title");
+    const message = document.getElementById("message");
+
+    if (mode && mode !== "resetPassword") {
+      title.textContent = "Link não suportado";
+      message.textContent = "Abra o link de redefinição de senha enviado por e-mail.";
+      form.hidden = true;
+    } else if (!oobCode || !apiKey) {
+      title.textContent = "Link inválido";
+      message.textContent = "Este link está incompleto. Solicite uma nova senha no aplicativo.";
+      form.hidden = true;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      error.hidden = true;
+      const password = document.getElementById("password").value;
+      const confirm = document.getElementById("confirm").value;
+      if (password.length < 6) {
+        showError("A senha deve ter pelo menos 6 caracteres.");
+        return;
+      }
+      if (password !== confirm) {
+        showError("As senhas não coincidem.");
+        return;
+      }
+      const response = await fetch(
+        "https://identitytoolkit.googleapis.com/v1/accounts:resetPassword?key=" + encodeURIComponent(apiKey),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ oobCode: oobCode, newPassword: password }),
+        }
+      );
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const code = body.error && body.error.message ? body.error.message : "";
+        if (code.indexOf("EXPIRED_OOB_CODE") !== -1 || code.indexOf("INVALID_OOB_CODE") !== -1) {
+          showError("Este link expirou ou já foi usado. Solicite uma nova senha no aplicativo.");
+        } else {
+          showError("Não foi possível alterar a senha. Solicite um novo e-mail no aplicativo.");
+        }
+        return;
+      }
+      title.textContent = "Senha alterada";
+      title.className = "ok";
+      message.textContent = "Sua senha foi atualizada. Volte ao aplicativo e entre com a nova senha.";
+      form.hidden = true;
+      error.hidden = true;
+    });
+
+    function showError(text) {
+      error.hidden = false;
+      error.textContent = text;
+    }
+  </script>
+</body>
+</html>

@@ -11,5 +11,6 @@ abstract class UserRepository {
     String? congregationId,
   });
   Future<UserModel> updateUser(UserModel user);
+  Future<void> updateAccessFlags(String id, List<String> flags);
   Future<void> deleteUser(String id);
 }

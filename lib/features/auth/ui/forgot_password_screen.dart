@@ -79,26 +79,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text.rich(
-                  TextSpan(
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    children: [
-                      const TextSpan(
-                        text:
-                            'Enviaremos um e-mail com uma senha nova e um botão ',
-                      ),
-                      TextSpan(
-                        text: 'Confirmar alteração',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                      const TextSpan(
-                        text:
-                            '. A senha só passa a funcionar no app depois dessa confirmação.',
-                      ),
-                    ],
-                  ),
+                Text(
+                  'Enviaremos uma senha temporária para o seu e-mail. '
+                  'Ao entrar com ela, o aplicativo pede para você escolher uma senha nova.',
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: AppSpacing.md),
                 AppCard(
@@ -114,7 +98,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         const SizedBox(height: AppSpacing.md),
                         Text(
                           'Se existir uma conta com este e-mail, você receberá '
-                          'mensagem com instruções. Confira também a pasta de spam.',
+                          'uma senha temporária. Confira também a pasta de spam.',
                           style: Theme.of(context).textTheme.bodyLarge,
                         ),
                         const SizedBox(height: AppSpacing.lg),
@@ -213,6 +197,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       'invalid-argument' => e.message ?? 'Verifique o e-mail informado.',
       'failed-precondition' =>
         e.message ?? 'Serviço de e-mail não configurado. Contacte o suporte.',
+      'unavailable' =>
+        'Serviço indisponível. Feche o app, abra de novo e tente outra vez.',
       'internal' => e.message ?? 'Não foi possível enviar. Tente mais tarde.',
       _ => e.message ?? 'Não foi possível concluir o pedido.',
     };

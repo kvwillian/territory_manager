@@ -62,6 +62,13 @@ class FirestoreUserRepository implements UserRepository {
   }
 
   @override
+  Future<void> updateAccessFlags(String id, List<String> flags) async {
+    await _firestore.collection(_collection).doc(id).update({
+      'accessFlags': flags,
+    });
+  }
+
+  @override
   Future<void> deleteUser(String id) async {
     await _firestore.collection(_collection).doc(id).delete();
   }
@@ -77,6 +84,8 @@ class FirestoreUserRepository implements UserRepository {
       ),
       email: data['email'] as String?,
       congregationId: data['congregationId'] as String? ?? defaultCongregationId,
+      mustChangePassword: data['mustChangePassword'] == true,
+      accessFlags: accessFlagsFromMap(data),
     );
   }
 }

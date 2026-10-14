@@ -1,7 +1,7 @@
 import 'package:cloud_functions/cloud_functions.dart';
 
-/// Pedido de redefinição de senha (sem estar autenticado). O e-mail contém a
-/// nova senha e um link para confirmar no navegador antes de valer no Firebase.
+/// Asks the server for a temporary password by email.
+/// The next sign-in must replace that password inside the app.
 class RequestPasswordResetService {
   final FirebaseFunctions _functions = FirebaseFunctions.instance;
 

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/providers/create_user_provider.dart';
 import '../../../../core/services/reset_password_service.dart';
+import '../../auth/models/access_flags.dart';
 import '../../auth/models/user_model.dart';
 import '../data/mock_user_repository.dart';
 import '../providers/users_provider.dart';
@@ -50,6 +51,7 @@ class UsersListScreen extends ConsumerWidget {
                       canResetPassword: useCloudFunction,
                       onResetPassword: () =>
                           _showResetPasswordDialog(context, ref, user),
+                      onEditAccess: () => _editAccess(context, ref, user),
                       onDelete: () => _deleteUser(context, ref, user),
                     ),
                   );
@@ -71,6 +73,63 @@ class UsersListScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _editAccess(
+    BuildContext context,
+    WidgetRef ref,
+    UserModel user,
+  ) async {
+    final initial = user.accessFlags ??
+        (user.isAdmin ? AccessFlags.all : [AccessFlags.territories]);
+    final selected = {...initial};
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('Acesso de ${user.name}'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final flag in AccessFlags.all)
+                    CheckboxListTile(
+                      value: selected.contains(flag),
+                      title: Text(AccessFlags.labels[flag] ?? flag),
+                      onChanged: (value) {
+                        setState(() {
+                          if (value == true) {
+                            selected.add(flag);
+                          } else {
+                            selected.remove(flag);
+                          }
+                        });
+                      },
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: const Text('Salvar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (saved != true) return;
+    await ref.read(userRepositoryProvider).updateAccessFlags(
+          user.id,
+          selected.toList(),
+        );
+    ref.invalidate(usersProvider);
   }
 
   Future<void> _deleteUser(
@@ -296,12 +355,14 @@ class _UserCard extends StatelessWidget {
     required this.user,
     required this.canResetPassword,
     required this.onResetPassword,
+    required this.onEditAccess,
     required this.onDelete,
   });
 
   final UserModel user;
   final bool canResetPassword;
   final VoidCallback onResetPassword;
+  final VoidCallback onEditAccess;
   final VoidCallback onDelete;
 
   @override
@@ -333,6 +394,11 @@ class _UserCard extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.tune),
+            onPressed: onEditAccess,
+            tooltip: 'Módulos',
           ),
           if (canResetPassword)
             IconButton(

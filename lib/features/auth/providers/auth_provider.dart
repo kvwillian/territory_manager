@@ -84,6 +84,8 @@ class AuthNotifier extends Notifier<AuthState> {
                 orElse: () => UserRole.conductor,
               ),
               congregationId: cid,
+              mustChangePassword: data['mustChangePassword'] == true,
+              accessFlags: accessFlagsFromMap(data),
             );
           }
           await user.getIdToken(true);
@@ -97,6 +99,8 @@ class AuthNotifier extends Notifier<AuthState> {
               orElse: () => UserRole.conductor,
             ),
             congregationId: defaultCongregationId,
+            mustChangePassword: data['mustChangePassword'] == true,
+            accessFlags: accessFlagsFromMap(data),
           );
         }
       } catch (e, st) {
@@ -150,5 +154,19 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> signOut() async {
     await FirebaseAuth.instance.signOut();
     state = AuthUnauthenticated();
+  }
+
+  /// Replaces the signed-in password and clears the temporary-password flag.
+  Future<void> changePassword(String newPassword) async {
+    final current = FirebaseAuth.instance.currentUser;
+    if (current == null) {
+      throw FirebaseAuthException(code: 'user-not-found');
+    }
+    await current.updatePassword(newPassword);
+    await FirebaseFirestore.instance.collection(_usersCollection).doc(current.uid).update({
+      'mustChangePassword': false,
+    });
+    final appUser = await _userFromFirebaseUser(current);
+    state = AuthAuthenticated(appUser.copyWith(mustChangePassword: false));
   }
 }

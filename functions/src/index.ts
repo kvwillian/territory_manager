@@ -160,17 +160,6 @@ export const resetUserPassword = functions.https.onCall(
 
 // --- Self-service password reset (e-mail com senha provisória + confirmação via link) ---
 
-function generateRandomPassword(length = 14): string {
-  const charset =
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@%#&*";
-  const bytes = crypto.randomBytes(length);
-  let pwd = "";
-  for (let i = 0; i < length; i++) {
-    pwd += charset[bytes[i]! % charset.length];
-  }
-  return pwd;
-}
-
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -179,39 +168,20 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function buildPasswordResetConfirmUrl(token: string): string {
-  const explicit = process.env.PASSWORD_RESET_CONFIRM_BASE_URL?.trim();
-  if (explicit) {
-    const hasQuery = explicit.includes("?");
-    return `${explicit}${hasQuery ? "&" : "?"}token=${encodeURIComponent(token)}`;
+function generateTemporaryPassword(length = 12): string {
+  const charset = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  const bytes = crypto.randomBytes(length);
+  let pwd = "";
+  for (let i = 0; i < length; i++) {
+    pwd += charset[bytes[i]! % charset.length];
   }
-  const project = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT;
-  const region = process.env.FUNCTION_REGION || "us-central1";
-  if (!project) {
-    throw new Error("Missing GCLOUD_PROJECT and PASSWORD_RESET_CONFIRM_BASE_URL");
-  }
-  return `https://${region}-${project}.cloudfunctions.net/confirmPasswordReset?token=${encodeURIComponent(token)}`;
+  return pwd;
 }
 
-async function deletePendingPasswordResetsForUid(uid: string): Promise<void> {
-  const snap = await admin
-    .firestore()
-    .collection(PASSWORD_RESET_COLLECTION)
-    .where("uid", "==", uid)
-    .get();
-  if (snap.empty) {
-    return;
-  }
-  const batch = admin.firestore().batch();
-  snap.docs.forEach((d) => batch.delete(d.ref));
-  await batch.commit();
-}
-
-async function sendResendPasswordResetEmail(opts: {
+async function sendTemporaryPasswordEmail(opts: {
   apiKey: string;
   to: string;
-  newPassword: string;
-  confirmUrl: string;
+  temporaryPassword: string;
 }): Promise<void> {
   const from =
     process.env.RESEND_FROM_EMAIL?.trim() ||
@@ -219,16 +189,10 @@ async function sendResendPasswordResetEmail(opts: {
 
   const html = `
 <p>Olá,</p>
-<p>Você solicitou uma nova senha para o <strong>Gerenciador de Territórios</strong>.</p>
-<p><strong>Nova senha:</strong> <code style="font-size:1.1em">${escapeHtml(opts.newPassword)}</code></p>
-<p>Ela <strong>só passa a valer no aplicativo</strong> depois que você tocar em <strong>Confirmar alteração</strong> abaixo.</p>
-<p style="margin:2rem 0">
-  <a href="${escapeHtml(opts.confirmUrl)}" style="background:#0d6efd;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600">
-    Confirmar alteração
-  </a>
-</p>
-<p>Ou copie o link no navegador:<br/><span style="word-break:break-all">${escapeHtml(opts.confirmUrl)}</span></p>
-<p>O link expira em <strong>1 hora</strong>. Se você não pediu isso, ignore este e-mail.</p>
+<p>Sua senha temporária do <strong>Gerenciador de Territórios</strong> é:</p>
+<p><strong style="font-size:1.25em;letter-spacing:0.04em">${escapeHtml(opts.temporaryPassword)}</strong></p>
+<p>Entre no aplicativo com essa senha. Em seguida, o app pede para você escolher uma senha nova. A senha temporária deixa de valer depois dessa troca.</p>
+<p>Se você não pediu isso, avise um administrador da congregação.</p>
 `;
 
   const res = await fetch("https://api.resend.com/emails", {
@@ -240,7 +204,7 @@ async function sendResendPasswordResetEmail(opts: {
     body: JSON.stringify({
       from,
       to: [opts.to],
-      subject: "Confirme sua nova senha — Gerenciador de Territórios",
+      subject: "Senha temporária — Gerenciador de Territórios",
       html,
     }),
   });
@@ -266,11 +230,10 @@ h1{font-size:1.35rem;color:${color}}
 }
 
 /**
- * Callable (sem login): pede redefinição por e-mail.
- * Envia senha aleatória + link para confirmar. A senha no Firebase só muda após o link.
+ * Callable (sem login): define uma senha temporária e envia por e-mail.
+ * O app exige a troca dessa senha no primeiro login.
  *
  * Configure RESEND_API_KEY (e opcionalmente RESEND_FROM_EMAIL) no ambiente da função.
- * Para chamadas sem utilizador Firebase autenticado, conceda invocador público a esta função (IAM).
  */
 export const requestPasswordReset = functions.https.onCall(async (data: { email?: string }) => {
   const emailRaw =
@@ -296,116 +259,114 @@ export const requestPasswordReset = functions.https.onCall(async (data: { email?
     throw new functions.https.HttpsError("internal", "Não foi possível processar o pedido");
   }
 
-  const newPassword = generateRandomPassword(14);
-  const token = crypto.randomBytes(32).toString("hex");
-  const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 60 * 60 * 1000);
-  const docRef = admin.firestore().collection(PASSWORD_RESET_COLLECTION).doc(token);
-
-  await deletePendingPasswordResetsForUid(uid);
-  await docRef.set({
-    uid,
-    newPassword,
-    email: emailRaw,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    expiresAt,
-  });
-
-  let confirmUrl: string;
-  try {
-    confirmUrl = buildPasswordResetConfirmUrl(token);
-  } catch (err) {
-    functions.logger.error("buildPasswordResetConfirmUrl", err);
-    await docRef.delete();
-    throw new functions.https.HttpsError(
-      "failed-precondition",
-      "Configuração do servidor incompleta (URL de confirmação)."
-    );
-  }
-
-  const isEmu = process.env.FUNCTIONS_EMULATOR === "true";
   const apiKey = process.env.RESEND_API_KEY;
-
+  const isEmu = process.env.FUNCTIONS_EMULATOR === "true";
   if (!apiKey) {
     if (isEmu) {
-      functions.logger.warn(
-        `requestPasswordReset (emulator): RESEND_API_KEY missing. confirmUrl=${confirmUrl}`
-      );
+      functions.logger.warn("requestPasswordReset (emulator): RESEND_API_KEY missing");
       return { ok: true };
     }
     functions.logger.error("RESEND_API_KEY missing in production");
-    await docRef.delete();
     throw new functions.https.HttpsError(
       "failed-precondition",
       "Envio de e-mail não está configurado. Contacte o administrador."
     );
   }
 
+  const temporaryPassword = generateTemporaryPassword();
   try {
-    await sendResendPasswordResetEmail({
+    await sendTemporaryPasswordEmail({
       apiKey,
       to: emailRaw,
-      newPassword,
-      confirmUrl,
+      temporaryPassword,
     });
   } catch (err) {
-    functions.logger.error("sendResendPasswordResetEmail", err);
-    await docRef.delete();
+    functions.logger.error("sendTemporaryPasswordEmail", err);
     throw new functions.https.HttpsError(
       "internal",
       "Não foi possível enviar o e-mail. Tente mais tarde."
     );
   }
 
+  await admin.auth().updateUser(uid, { password: temporaryPassword });
+  await admin.firestore().collection(USERS_COLLECTION).doc(uid).set(
+    { mustChangePassword: true },
+    { merge: true },
+  );
+
   return { ok: true };
 });
 
+function passwordFormPage(token: string, error?: string): string {
+  const errorBlock = error
+    ? `<p style="color:#b02a37">${escapeHtml(error)}</p>`
+    : "";
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Nova senha</title>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;max-width:36rem;margin:2.5rem auto;padding:0 1.2rem;color:#222;line-height:1.5}
+h1{font-size:1.35rem}
+label{display:block;margin:1rem 0 .35rem}
+input{width:100%;box-sizing:border-box;padding:.7rem;font-size:1rem}
+button{margin-top:1.2rem;background:#0d6efd;color:#fff;border:0;border-radius:8px;padding:.8rem 1.2rem;font-size:1rem;font-weight:600}
+</style>
+</head>
+<body>
+<h1>Escolha uma nova senha</h1>
+<p>A senha do aplicativo só muda depois que você enviar este formulário.</p>
+${errorBlock}
+<form method="POST" action="">
+  <input type="hidden" name="token" value="${escapeHtml(token)}"/>
+  <label for="password">Nova senha</label>
+  <input id="password" name="password" type="password" minlength="6" required autocomplete="new-password"/>
+  <label for="confirm">Confirmar senha</label>
+  <input id="confirm" name="confirm" type="password" minlength="6" required autocomplete="new-password"/>
+  <button type="submit">Definir senha</button>
+</form>
+</body>
+</html>`;
+}
+
+function readFormField(req: functions.https.Request, name: string): string {
+  const body = req.body as Record<string, unknown> | undefined;
+  const value = body?.[name];
+  if (typeof value === "string") return value;
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  return "";
+}
+
 /**
- * HTTP GET: aplica a nova senha ao utilizador e apaga o token (idempotência limitada: segundo clique falha).
+ * GET mostra o formulário. POST grava a senha.
+ * Abrir o link (inclusive um filtro de e-mail) não altera a senha.
  */
 export const confirmPasswordReset = functions.https.onRequest(async (req, res) => {
   res.set("Content-Type", "text/html; charset=utf-8");
 
-  if (req.method !== "GET") {
-    res
-      .status(405)
-      .set("Allow", "GET")
-      .send(
-        htmlResultPage(
-          "Método não permitido",
-          "Abra o link enviado por e-mail no navegador.",
-          false
-        )
-      );
-    return;
-  }
+  const rawToken = req.method === "POST" ? readFormField(req, "token") : req.query.token;
+  const token = typeof rawToken === "string"
+    ? rawToken.trim()
+    : Array.isArray(rawToken)
+      ? String(rawToken[0]).trim()
+      : "";
 
-  const raw = req.query.token;
-  const token = typeof raw === "string" ? raw.trim() : Array.isArray(raw) ? String(raw[0]).trim() : "";
   if (!token || !/^[a-f0-9]{64}$/i.test(token)) {
-    res
-      .status(400)
-      .send(
-        htmlResultPage(
-          "Link inválido",
-          "O link de confirmação é inválido ou está incompleto.",
-          false
-        )
-      );
+    res.status(400).send(htmlResultPage(
+      "Link inválido",
+      "O link de redefinição é inválido ou está incompleto.",
+      false,
+    ));
     return;
   }
 
   const ref = admin.firestore().collection(PASSWORD_RESET_COLLECTION).doc(token);
   const snap = await ref.get();
   if (!snap.exists) {
-    res
-      .status(404)
-      .send(
-        htmlResultPage(
-          "Link já usado ou inválido",
-          "Este link não é mais válido. Se precisar, solicite uma nova senha no aplicativo.",
-          false
-        )
-      );
+    res.status(404).send(htmlResultPage(
+      "Link já usado ou inválido",
+      "Este link não é mais válido. Solicite uma nova senha no aplicativo.",
+      false,
+    ));
     return;
   }
 
@@ -413,52 +374,61 @@ export const confirmPasswordReset = functions.https.onRequest(async (req, res) =
   const exp = doc.expiresAt as admin.firestore.Timestamp | undefined;
   if (exp && exp.toMillis() < Date.now()) {
     await ref.delete().catch(() => undefined);
-    res
-      .status(400)
-      .send(
-        htmlResultPage(
-          "Link expirado",
-          "Este link expirou. Solicite uma nova senha no aplicativo.",
-          false
-        )
-      );
+    res.status(400).send(htmlResultPage(
+      "Link expirado",
+      "Este link expirou. Solicite uma nova senha no aplicativo.",
+      false,
+    ));
     return;
   }
 
   const uid = doc.uid as string | undefined;
-  const newPassword = doc.newPassword as string | undefined;
-  if (!uid || !newPassword || newPassword.length < 6) {
-    res
-      .status(500)
-      .send(htmlResultPage("Erro", "Dados de redefinição inválidos.", false));
+  if (!uid) {
+    res.status(500).send(htmlResultPage("Erro", "Dados de redefinição inválidos.", false));
+    return;
+  }
+
+  if (req.method === "GET") {
+    res.status(200).send(passwordFormPage(token));
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).set("Allow", "GET, POST").send(htmlResultPage(
+      "Método não permitido",
+      "Abra o link enviado por e-mail no navegador.",
+      false,
+    ));
+    return;
+  }
+
+  const password = readFormField(req, "password");
+  const confirm = readFormField(req, "confirm");
+  if (password.length < 6) {
+    res.status(400).send(passwordFormPage(token, "A senha deve ter pelo menos 6 caracteres."));
+    return;
+  }
+  if (password !== confirm) {
+    res.status(400).send(passwordFormPage(token, "As senhas não coincidem."));
     return;
   }
 
   try {
-    await admin.auth().updateUser(uid, { password: newPassword });
+    await admin.auth().updateUser(uid, { password });
   } catch (err) {
     functions.logger.error("confirmPasswordReset updateUser", err);
-    res
-      .status(500)
-      .send(
-        htmlResultPage(
-          "Erro ao alterar senha",
-          "Não foi possível concluir a alteração. Solicite uma nova senha ou contacte o suporte.",
-          false
-        )
-      );
+    res.status(500).send(htmlResultPage(
+      "Erro ao alterar senha",
+      "Não foi possível concluir a alteração. Solicite uma nova senha no aplicativo.",
+      false,
+    ));
     return;
   }
 
   await ref.delete().catch((e) => functions.logger.error("confirmPasswordReset delete token", e));
-
-  res
-    .status(200)
-    .send(
-      htmlResultPage(
-        "Senha alterada",
-        "Sua senha foi atualizada com sucesso. Já pode entrar no aplicativo com a nova senha enviada por e-mail.",
-        true
-      )
-    );
+  res.status(200).send(htmlResultPage(
+    "Senha alterada",
+    "Sua senha foi atualizada. Volte ao aplicativo e entre com a nova senha.",
+    true,
+  ));
 });

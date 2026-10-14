@@ -4,7 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:territory_manager/app/app_shell.dart';
-import 'package:territory_manager/features/admin/ui/admin_dashboard_screen.dart';
+import 'package:territory_manager/features/announcements/ui/announcement_form_screen.dart';
+import 'package:territory_manager/features/announcements/ui/announcements_list_screen.dart';
+import 'package:territory_manager/features/auth/models/access_flags.dart';
+import 'package:territory_manager/features/home/ui/congregation_dashboard_screen.dart';
+import 'package:territory_manager/features/home/ui/module_soon_screen.dart';
 import 'package:territory_manager/features/admin/ui/assignments_screen.dart';
 import 'package:territory_manager/features/admin/ui/create_user_screen.dart';
 import 'package:territory_manager/features/admin/ui/history_screen.dart';
@@ -23,6 +27,7 @@ import 'package:territory_manager/features/field_groups/ui/field_group_edit_scre
 import 'package:territory_manager/features/field_groups/ui/field_group_form_screen.dart';
 import 'package:territory_manager/features/field_groups/ui/field_groups_list_screen.dart';
 import 'package:territory_manager/features/auth/providers/auth_provider.dart';
+import 'package:territory_manager/features/auth/ui/change_password_screen.dart';
 import 'package:territory_manager/features/auth/ui/forgot_password_screen.dart';
 import 'package:territory_manager/features/auth/ui/login_screen.dart';
 import 'package:territory_manager/features/onboarding/ui/create_account_placeholder_screen.dart';
@@ -45,7 +50,8 @@ class _AuthRefreshNotifier extends ChangeNotifier {
 /// When navigation uses [GoRouter.go], the Navigator stack may not pop.
 /// Maps the current shell route to its parent so system back goes up (e.g. Designações → Painel).
 String? _parentLocationForBack(String loc) {
-  if (loc.startsWith('/territory/')) return '/home';
+  if (loc.startsWith('/territory/')) return '/field';
+  if (loc == '/field') return '/home';
   if (loc == '/history') return '/home';
   if (loc == '/congregation') return '/home';
   if (loc.startsWith('/admin/territories/edit/')) return '/admin/territories';
@@ -89,23 +95,32 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isForgotPassword = loc == '/forgot-password';
       final isOnboarding = loc == '/onboarding' || loc.startsWith('/onboarding/');
 
-      // Redirect bare / to /admin or /home based on role
-      if (state.uri.path == '/' || state.uri.path.isEmpty) {
-        if (authState is AuthAuthenticated && authState.user.isAdmin) {
-          return '/admin';
-        }
-        return '/home';
-      }
-
       if (authState is AuthLoading) {
         return null;
       }
 
       if (authState is AuthAuthenticated) {
-        if (isLoggingIn || isForgotPassword) {
-          return authState.user.isAdmin ? '/admin' : '/home';
+        final user = authState.user;
+        if (user.mustChangePassword && loc != '/change-password') {
+          return '/change-password';
         }
-        if (loc.startsWith('/admin') && !authState.user.isAdmin) {
+        if (!user.mustChangePassword && loc == '/change-password') {
+          return user.isAdmin ? '/admin' : '/home';
+        }
+        if (state.uri.path == '/' || state.uri.path.isEmpty) {
+          return user.isAdmin ? '/admin' : '/home';
+        }
+        if ((loc == '/field' || loc.startsWith('/territory/')) &&
+            !user.canAccess(AccessFlags.territories)) {
+          return '/home';
+        }
+        if (loc == '/announcements/create' && !user.isAdmin) {
+          return '/announcements';
+        }
+        if (isLoggingIn || isForgotPassword) {
+          return user.isAdmin ? '/admin' : '/home';
+        }
+        if (loc.startsWith('/admin') && !user.isAdmin) {
           return '/home';
         }
         return null;
@@ -128,6 +143,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/forgot-password',
         builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: '/change-password',
+        builder: (context, state) => const ChangePasswordScreen(),
       ),
       GoRoute(
         path: '/onboarding',
@@ -171,7 +190,14 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: 'home',
                 builder: (context, state) => const ShellRouteConfig(
-                  title: 'Início',
+                  title: 'Minha congregação',
+                  child: CongregationDashboardScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'field',
+                builder: (context, state) => const ShellRouteConfig(
+                  title: 'Territórios',
                   child: HomeScreen(),
                 ),
               ),
@@ -201,7 +227,10 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
               GoRoute(
                 path: 'admin',
-                builder: (context, state) => const AdminDashboardScreen(),
+                builder: (context, state) => const ShellRouteConfig(
+                  title: 'Minha congregação',
+                  child: CongregationDashboardScreen(),
+                ),
                 routes: [
                   GoRoute(
                     path: 'bairros',
@@ -293,6 +322,33 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: 'admin/history',
                 builder: (context, state) => const HistoryScreen(),
+              ),
+              GoRoute(
+                path: 'announcements',
+                builder: (context, state) => const ShellRouteConfig(
+                  title: 'Avisos',
+                  child: AnnouncementsListScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'announcements/create',
+                builder: (context, state) => const ShellRouteConfig(
+                  title: 'Novo aviso',
+                  child: AnnouncementFormScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'module/:name',
+                builder: (context, state) {
+                  final name = state.pathParameters['name'] ?? '';
+                  final title = name == 'publicadores'
+                      ? 'Publicadores'
+                      : 'Relatórios';
+                  return ShellRouteConfig(
+                    title: title,
+                    child: ModuleSoonScreen(title: title),
+                  );
+                },
               ),
             ],
           ),

@@ -69,7 +69,9 @@ service cloud.firestore {
         && request.resource.data.role == resource.data.role
         && keepsCongregation()
         && (
-          userId == request.auth.uid
+          (userId == request.auth.uid
+            && request.resource.data.get('accessFlags', null)
+                == resource.data.get('accessFlags', null))
           || (isAdmin() && inCongregation(resource.data))
         );
       allow delete: if isAdmin() && inCongregation(resource.data);
@@ -134,6 +136,13 @@ service cloud.firestore {
           || request.resource.data.conductorId == request.auth.uid
         );
       allow update, delete: if false;
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if inCongregation(resource.data);
+      allow create: if adminCreates();
+      allow update: if adminWritesConfig();
+      allow delete: if isAdmin() && inCongregation(resource.data);
     }
 
     // Apenas Cloud Functions (Admin SDK). Clientes nunca acedem.

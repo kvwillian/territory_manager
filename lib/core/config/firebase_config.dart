@@ -25,10 +25,12 @@ class FirebaseConfig {
 
   static bool get isInitialized => Firebase.apps.isNotEmpty;
 
-  /// App Check is required when enforcement is on (e.g. Cloud Functions).
-  /// Debug builds use the debug provider — register the printed token in Firebase Console.
+  /// Release builds use Play Integrity / DeviceCheck.
+  /// Debug skips App Check: the debug provider calls an API that is not
+  /// enabled on this project, and a failed token makes Auth and Cloud
+  /// Functions return UNAVAILABLE.
   static Future<void> _activateAppCheck() async {
-    if (kIsWeb) return;
+    if (kIsWeb || kDebugMode) return;
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
       case TargetPlatform.iOS:
@@ -40,12 +42,9 @@ class FirebaseConfig {
     try {
       await FirebaseAppCheck.instance.activate(
         // ignore: deprecated_member_use
-        androidProvider: kDebugMode
-            ? AndroidProvider.debug
-            : AndroidProvider.playIntegrity,
+        androidProvider: AndroidProvider.playIntegrity,
         // ignore: deprecated_member_use
-        appleProvider:
-            kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck,
+        appleProvider: AppleProvider.deviceCheck,
       );
     } catch (e, st) {
       debugPrint('Firebase App Check activate failed: $e\n$st');

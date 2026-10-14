@@ -71,7 +71,10 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   String _titleForLocation(String location) {
-    if (location == '/home') return 'Início';
+    if (location == '/home' || location == '/admin') return 'Minha congregação';
+    if (location == '/field') return 'Territórios';
+    if (location == '/announcements') return 'Avisos';
+    if (location == '/announcements/create') return 'Novo aviso';
     if (location == '/history') return 'Histórico';
     if (location == '/congregation') return 'Reuniões';
     if (location.startsWith('/territory/')) return 'Território';
@@ -98,7 +101,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   /// Returns the FAB for the current route. Null = no FAB.
   /// Keeps FAB scoped to the correct screens (territories, meeting locations, bairros).
   Widget? _fabForLocation(String location) {
-    if (location == '/admin' || location == '/admin/territories') {
+    if (location == '/admin/territories') {
       return FloatingActionButton.extended(
         onPressed: () => context.push('/admin/territories/create'),
         icon: const Icon(Icons.add),
@@ -264,7 +267,8 @@ class _AppDrawer extends StatelessWidget {
 }
 
 const _adminItems = [
-  _DrawerItem(icon: Icons.dashboard_outlined, label: 'Painel', path: '/admin'),
+  _DrawerItem(icon: Icons.dashboard_outlined, label: 'Início', path: '/admin'),
+  _DrawerItem(icon: Icons.campaign_outlined, label: 'Avisos', path: '/announcements'),
   _DrawerItem(icon: Icons.event_outlined, label: 'Reuniões', path: '/congregation'),
   _DrawerItem(icon: Icons.map_outlined, label: 'Territórios', path: '/admin/territories'),
   _DrawerItem(icon: Icons.location_city_outlined, label: 'Bairros', path: '/admin/bairros'),
@@ -277,6 +281,7 @@ const _adminItems = [
 
 const _conductorItems = [
   _DrawerItem(icon: Icons.home_outlined, label: 'Início', path: '/home'),
+  _DrawerItem(icon: Icons.campaign_outlined, label: 'Avisos', path: '/announcements'),
   _DrawerItem(icon: Icons.event_outlined, label: 'Reuniões', path: '/congregation'),
   _DrawerItem(icon: Icons.history, label: 'Histórico', path: '/history'),
 ];
