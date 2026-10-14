@@ -1,15 +1,24 @@
 import { useMemo, useState } from 'react'
-import { Download, Flag, Loader2, Upload } from 'lucide-react'
+import { Download, Flag, Loader2, Trash2, Upload } from 'lucide-react'
 import { useAccount } from '../../auth'
+import { meetingDatesInMonth } from '../../domain'
+import { useMeetings } from '../../store'
+import { AssigneeField } from './AssigneeField'
+import { usePublishers, type CongregationPublisher } from './publishers'
 import type { ExportFormat } from './types'
 import {
+  addRosterDay,
+  assignSlot,
   emptyRoster,
   loadRosters,
   monthNames,
   parseRosterText,
+  removeRosterDay,
   rosterKey,
+  rosterRowsForMeetings,
   saveRosters,
   type MonthlyRoster,
+  type RosterField,
   type RosterRow,
 } from './roster'
 
@@ -29,20 +38,32 @@ export function AudioVideoPage() {
   const [alerts, setAlerts] = useState<string[]>([])
   const [format, setFormat] = useState<ExportFormat>('xlsx')
   const [exporting, setExporting] = useState<'meeting' | 'month' | null>(null)
+  const [newDay, setNewDay] = useState('')
+  const { publishers, status: publisherStatus } = usePublishers(account?.congregationId ?? null)
+  const { meetings } = useMeetings()
 
   const roster = useMemo(
     () => rosters.find((item) => rosterKey(item.year, item.month) === monthKey) ?? emptyFromKey(monthKey),
     [rosters, monthKey],
   )
-  const selected = roster.rows.find((row) => row.day === selectedDay) ?? null
+  const displayRoster = useMemo(
+    () => ({ ...roster, rows: rosterRowsForMeetings(roster, meetingDatesInMonth(meetings, monthKey)) }),
+    [roster, meetings, monthKey],
+  )
+  const selected = displayRoster.rows.find((row) => row.day === selectedDay) ?? null
   const today = new Date()
-  const nextMeeting = roster.year === today.getFullYear() && roster.month === today.getMonth() + 1
-    ? roster.rows.find((row) => row.day >= today.getDate())
+  const nextMeeting = displayRoster.year === today.getFullYear() && displayRoster.month === today.getMonth() + 1
+    ? displayRoster.rows.find((row) => row.day >= today.getDate())
     : undefined
 
   function persist(next: MonthlyRoster[]) {
     setRosters(next)
     saveRosters(next)
+  }
+
+  function saveRoster(next: MonthlyRoster) {
+    const key = rosterKey(next.year, next.month)
+    persist([...rosters.filter((item) => rosterKey(item.year, item.month) !== key), next])
   }
 
   function shift(delta: number) {
@@ -91,7 +112,7 @@ export function AudioVideoPage() {
     setExporting(scope)
     try {
       const { exportRoster } = await import('./exportRoster')
-      await exportRoster(roster, format, scope === 'meeting' ? selected ?? undefined : undefined)
+      await exportRoster(displayRoster, format, scope === 'meeting' ? selected ?? undefined : undefined)
     } catch {
       const file = format === 'pdf' ? 'o PDF' : format === 'docx' ? 'o documento' : 'a planilha'
       setError(`Não foi possível gerar ${file}. Tente novamente.`)
@@ -145,7 +166,7 @@ export function AudioVideoPage() {
           </button>
           <button
             type="button"
-            disabled={roster.rows.length === 0 || exporting !== null}
+            disabled={displayRoster.rows.length === 0 || exporting !== null}
             onClick={() => void download('month')}
             className="inline-flex h-11 items-center gap-2 rounded-xl bg-indigo px-3 text-sm font-medium text-white disabled:opacity-50"
           >
@@ -156,10 +177,39 @@ export function AudioVideoPage() {
       </div>
       {error ? <p className="mt-4 rounded-xl bg-[#FDE8EF] px-3 py-2 text-sm text-[#9F1239]">{error}</p> : null}
 
-      <div className="mt-5 flex h-11 w-fit items-center rounded-xl border border-line bg-white">
-        <button type="button" className="px-3 text-muted" onClick={() => shift(-1)} aria-label="Mês anterior">‹</button>
-        <span className="min-w-40 text-center text-sm font-medium capitalize">{monthNames[roster.month - 1]} de {roster.year}</span>
-        <button type="button" className="px-3 text-muted" onClick={() => shift(1)} aria-label="Próximo mês">›</button>
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <div className="flex h-11 w-fit items-center rounded-xl border border-line bg-white">
+          <button type="button" className="px-3 text-muted" onClick={() => shift(-1)} aria-label="Mês anterior">‹</button>
+          <span className="min-w-40 text-center text-sm font-medium capitalize">{monthNames[roster.month - 1]} de {roster.year}</span>
+          <button type="button" className="px-3 text-muted" onClick={() => shift(1)} aria-label="Próximo mês">›</button>
+        </div>
+        <form
+          className="flex h-11 items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            const day = Number(newDay)
+            const next = addRosterDay(roster, day)
+            if (next !== roster) saveRoster(next)
+            if (next.rows.some((row) => row.day === day)) {
+              setSelectedDay(day)
+              setNewDay('')
+            }
+          }}
+        >
+          <input
+            type="number"
+            min={1}
+            max={31}
+            value={newDay}
+            aria-label="Dia da reunião"
+            placeholder="Dia"
+            onChange={(event) => setNewDay(event.target.value)}
+            className="h-11 w-20 rounded-xl border border-line bg-white px-3 text-sm"
+          />
+          <button type="submit" className="h-11 rounded-xl border border-line bg-white px-3 text-sm font-medium">
+            Adicionar dia
+          </button>
+        </form>
       </div>
 
       <div className="mt-4 overflow-x-auto rounded-2xl border border-line bg-white">
@@ -170,18 +220,19 @@ export function AudioVideoPage() {
               <th className="px-4 py-3">Indicadores</th>
               <th className="px-4 py-3">Microfones</th>
               <th className="px-4 py-3">Mesa de som</th>
+              <th className="w-12 px-2 py-3"><span className="sr-only">Excluir</span></th>
             </tr>
           </thead>
           <tbody>
-            {roster.rows.length === 0 ? (
+            {displayRoster.rows.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-muted">Nenhuma designação neste mês. Importe o cartaz mensal.</td>
+                <td colSpan={5} className="px-4 py-8 text-muted">Nenhuma reunião neste mês.</td>
               </tr>
-            ) : roster.rows.map((row, index) => (
+            ) : displayRoster.rows.map((row, index) => (
               <tr
                 key={row.day}
                 onClick={() => setSelectedDay(row.day)}
-                className={`cursor-pointer border-t border-line ${selectedDay === row.day ? 'bg-indigo-soft' : 'hover:bg-[#F8FAFC]'}`}
+                className={`border-t border-line ${selectedDay === row.day ? 'bg-indigo-soft' : ''}`}
               >
                 <td className="px-4 py-3">
                   <span className="inline-flex items-center gap-2">
@@ -194,15 +245,59 @@ export function AudioVideoPage() {
                     ) : null}
                   </span>
                 </td>
-                <td className="px-4 py-3"><NameChips names={row.attendants} dark={index % 2 === 1} /></td>
-                <td className="px-4 py-3"><NameChips names={row.microphones} dark={index % 2 === 1} /></td>
-                <td className="px-4 py-3"><NameChips names={row.sound} dark={index % 2 === 1} /></td>
+                <AssignmentCell
+                  row={row}
+                  field="attendants"
+                  dark={index % 2 === 1}
+                  publishers={publishers}
+                  publisherStatus={publisherStatus}
+                  onAssign={(index, name) => {
+                    setSelectedDay(row.day)
+                    saveRoster(assignSlot(addRosterDay(roster, row.day), row.day, 'attendants', index, name))
+                  }}
+                />
+                <AssignmentCell
+                  row={row}
+                  field="microphones"
+                  dark={index % 2 === 1}
+                  publishers={publishers}
+                  publisherStatus={publisherStatus}
+                  onAssign={(index, name) => {
+                    setSelectedDay(row.day)
+                    saveRoster(assignSlot(addRosterDay(roster, row.day), row.day, 'microphones', index, name))
+                  }}
+                />
+                <AssignmentCell
+                  row={row}
+                  field="sound"
+                  dark={index % 2 === 1}
+                  publishers={publishers}
+                  publisherStatus={publisherStatus}
+                  onAssign={(index, name) => {
+                    setSelectedDay(row.day)
+                    saveRoster(assignSlot(addRosterDay(roster, row.day), row.day, 'sound', index, name))
+                  }}
+                />
+                <td className="px-2 py-2 text-right">
+                  <button
+                    type="button"
+                    aria-label={`Excluir dia ${row.day}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      saveRoster(removeRosterDay(roster, row.day))
+                      if (selectedDay === row.day) setSelectedDay(null)
+                    }}
+                    className="rounded-lg p-2 text-muted"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="mt-3 text-xs text-muted">Selecione um dia para exportar as designações daquela reunião.</p>
+      <p className="mt-3 text-xs text-muted">Clique em um nome para buscar um publicador habilitado. Selecione o dia para exportar aquela reunião.</p>
 
       {importing ? (
         <div className="fixed inset-0 z-30 grid place-items-center bg-[#0B0E14]/40 p-4">
@@ -254,21 +349,46 @@ export function AudioVideoPage() {
   )
 }
 
-function NameChips({ names, dark }: { names: string[]; dark: boolean }) {
-  const visible = names.filter(Boolean)
-  if (visible.length === 0) return <span className="text-muted">—</span>
+function AssignmentCell({
+  row,
+  field,
+  dark,
+  publishers,
+  publisherStatus,
+  onAssign,
+}: {
+  row: RosterRow
+  field: RosterField
+  dark: boolean
+  publishers: CongregationPublisher[]
+  publisherStatus: 'loading' | 'ready' | 'error'
+  onAssign: (index: number, name: string) => void
+}) {
+  const slots = [row[field][0] ?? '', row[field][1] ?? '']
   return (
-    <span className="flex flex-wrap gap-1.5">
-      {visible.map((name) => (
-        <span
-          key={name}
-          className={`rounded-full px-2.5 py-1 text-xs font-medium text-[#0B0E14] ${dark ? 'bg-[#D5DDE8]' : 'bg-[#F1F5F9]'}`}
-        >
-          {name}
-        </span>
-      ))}
-    </span>
+    <td className="px-3 py-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {slots.map((name, index) => (
+          <AssigneeField
+            key={index}
+            value={name}
+            field={field}
+            publishers={publishers}
+            publisherStatus={publisherStatus}
+            dark={dark}
+            label={`${fieldLabels[field]} ${index + 1} do dia ${row.day}`}
+            onCommit={(next) => onAssign(index, next)}
+          />
+        ))}
+      </div>
+    </td>
   )
+}
+
+const fieldLabels: Record<RosterField, string> = {
+  attendants: 'indicadores',
+  microphones: 'microfones',
+  sound: 'mesa de som',
 }
 
 function emptyFromKey(key: string): MonthlyRoster {

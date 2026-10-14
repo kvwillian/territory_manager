@@ -115,6 +115,10 @@ export function monthTitle(key: string) {
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
+export function meetingDatesInMonth(meetings: { isoDate: string }[], key: string) {
+  return [...new Set(meetings.filter((meeting) => meeting.isoDate.startsWith(`${key}-`)).map((meeting) => meeting.isoDate))].sort()
+}
+
 export function meetingInStrip(isoDate: string, key: string) {
   const [year, month] = key.split('-').map(Number)
   const start = new Date(year, month - 1, 1)

@@ -30,24 +30,38 @@ textarea {
   font-family: inherit;
 }
 
-button {
-  transition:
-    background-color 150ms ease,
-    border-color 150ms ease,
-    color 150ms ease,
-    filter 150ms ease,
-    transform 150ms ease;
-}
+@layer base {
+  button {
+    position: relative;
+    isolation: isolate;
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease;
+  }
 
-button:hover:not(:disabled) {
-  filter: brightness(0.96);
-}
+  button::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background-color: transparent;
+    transition: background-color 150ms ease;
+  }
 
-button:active:not(:disabled) {
-  transform: scale(0.97);
-}
+  button:hover:not(:disabled)::before {
+    background-color: color-mix(in srgb, black 8%, transparent);
+  }
 
-button:disabled {
-  transform: none;
-  filter: none;
+  button:active:not(:disabled)::before {
+    background-color: color-mix(in srgb, black 18%, transparent);
+  }
+
+  button:disabled::before,
+  button:disabled:hover::before,
+  button:disabled:active::before {
+    background-color: transparent;
+  }
 }

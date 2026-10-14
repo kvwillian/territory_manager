@@ -10,6 +10,7 @@ export type Account = {
   role: 'admin' | 'conductor'
   congregationId: string | null
   mustChangePassword: boolean
+  manageFlags: string[]
 }
 
 type AuthState =
@@ -35,7 +36,13 @@ async function accountFor(user: User): Promise<Account> {
     role: data?.role === 'admin' ? 'admin' : 'conductor',
     congregationId: typeof data?.congregationId === 'string' ? data.congregationId : null,
     mustChangePassword: data?.mustChangePassword === true,
+    manageFlags: stringList(data?.manageFlags),
   }
+}
+
+function stringList(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string')
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {

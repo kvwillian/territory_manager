@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { PlaceholderPage } from './components/PlaceholderPage'
 import { AudioVideoPage } from './features/audio-video/AudioVideoPage'
+import { CleaningPage } from './features/cleaning/CleaningPage'
+import { ElderlySupportPage } from './features/elderly-support/ElderlySupportPage'
 import { MeetingsPage } from './features/meetings/MeetingsPage'
 
 export function App() {
@@ -29,24 +31,8 @@ export function App() {
         />
         <Route path="designacoes/reunioes" element={<MeetingsPage />} />
         <Route path="designacoes/audio-video" element={<AudioVideoPage />} />
-        <Route
-          path="designacoes/idosos"
-          element={
-            <PlaceholderPage
-              title="Suporte a Idosos"
-              body="As escalas de apoio entram numa etapa seguinte, com documento próprio."
-            />
-          }
-        />
-        <Route
-          path="designacoes/limpeza"
-          element={
-            <PlaceholderPage
-              title="Limpeza"
-              body="Equipes e responsáveis entram depois, sem reutilizar o programa da reunião."
-            />
-          }
-        />
+        <Route path="designacoes/idosos" element={<ElderlySupportPage />} />
+        <Route path="designacoes/limpeza" element={<CleaningPage />} />
         <Route
           path="publicadores"
           element={

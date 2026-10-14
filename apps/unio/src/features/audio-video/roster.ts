@@ -165,3 +165,51 @@ export function loadRosters(): MonthlyRoster[] {
 export function saveRosters(rosters: MonthlyRoster[]) {
   localStorage.setItem('unio-av-rosters', JSON.stringify(rosters))
 }
+
+export type RosterField = 'attendants' | 'microphones' | 'sound'
+
+export function assignSlot(roster: MonthlyRoster, day: number, field: RosterField, index: number, name: string): MonthlyRoster {
+  return {
+    ...roster,
+    rows: roster.rows.map((row) => {
+      if (row.day !== day) return row
+      const next = [row[field][0] ?? '', row[field][1] ?? '']
+      next[index] = name
+      return { ...row, [field]: next }
+    }),
+  }
+}
+
+export function removeRosterDay(roster: MonthlyRoster, day: number): MonthlyRoster {
+  const alreadyOmitted = (roster.omittedDays ?? []).includes(day)
+  const hasRow = roster.rows.some((row) => row.day === day)
+  if (alreadyOmitted && !hasRow) return roster
+  return {
+    ...roster,
+    omittedDays: alreadyOmitted ? roster.omittedDays : [...(roster.omittedDays ?? []), day],
+    rows: roster.rows.filter((row) => row.day !== day),
+  }
+}
+
+export function addRosterDay(roster: MonthlyRoster, day: number): MonthlyRoster {
+  if (!Number.isInteger(day) || day < 1 || day > 31) return roster
+  const omittedDays = (roster.omittedDays ?? []).filter((item) => item !== day)
+  const restored = omittedDays.length !== (roster.omittedDays ?? []).length
+  if (roster.rows.some((row) => row.day === day)) return restored ? { ...roster, omittedDays } : roster
+  const row: RosterRow = { day, attendants: ['', ''], microphones: ['', ''], sound: ['', ''] }
+  return { ...roster, omittedDays, rows: [...roster.rows, row].sort((a, b) => a.day - b.day) }
+}
+
+export function rosterRowsForMeetings(roster: MonthlyRoster, dates: string[]): RosterRow[] {
+  const omitted = new Set(roster.omittedDays ?? [])
+  const byDay = new Map(roster.rows.map((row) => [row.day, row]))
+  const days = new Set(roster.rows.map((row) => row.day))
+  for (const date of dates) {
+    const day = Number(date.slice(8, 10))
+    if (day >= 1 && day <= 31) days.add(day)
+  }
+  return [...days]
+    .filter((day) => !omitted.has(day))
+    .sort((a, b) => a - b)
+    .map((day) => byDay.get(day) ?? { day, attendants: ['', ''], microphones: ['', ''], sound: ['', ''] })
+}

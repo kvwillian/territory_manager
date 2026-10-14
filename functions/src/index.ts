@@ -439,3 +439,12 @@ export {
   cancelMeetingImport,
   cleanupMeetingImportFiles,
 } from "./meetingImport";
+
+export {
+  createElderlySupportSchedule,
+  listElderlySupportSchedules,
+  getElderlySupportSchedule,
+  updateElderlySupportAssignments,
+  publishElderlySupportSchedule,
+  unpublishElderlySupportSchedule,
+} from "./elderlySupport";

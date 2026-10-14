@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "tsx --test test/rosterPoster.test.ts"
+    "test": "tsx --test test/rosterPoster.test.ts test/rosterEdit.test.ts test/elderlySupport.test.ts test/storedMeetings.test.ts"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",

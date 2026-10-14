@@ -52,6 +52,16 @@ service cloud.firestore {
           && 'meetings' in profile().manageFlags);
     }
 
+    // Mesmo critério das reuniões: admin da congregação, ou manageFlags com elderlySupport.
+    function managesElderlySupport() {
+      return isAdmin()
+        || (hasProfile()
+          && profile().congregationId is string
+          && profile().congregationId.size() > 0
+          && profile().manageFlags is list
+          && 'elderlySupport' in profile().manageFlags);
+    }
+
     function canReadMeetingProgram(data) {
       return inCongregation(data) && (
         managesMeetings()
@@ -180,6 +190,12 @@ service cloud.firestore {
 
     match /meetingImports/{importId} {
       allow read: if managesMeetings() && inCongregation(resource.data);
+      allow create, update, delete: if false;
+    }
+
+    // Escalas de suporte a idosos. Escrita só pelas Cloud Functions.
+    match /elderlySupportSchedules/{scheduleId} {
+      allow read: if managesElderlySupport() && inCongregation(resource.data);
       allow create, update, delete: if false;
     }
 

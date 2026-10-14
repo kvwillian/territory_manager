@@ -20,7 +20,7 @@ function Gate() {
     return <LoginPage />
   }
   return (
-    <MeetingsProvider>
+    <MeetingsProvider congregationId={authState.account.congregationId}>
       <App />
     </MeetingsProvider>
   )

@@ -10,6 +10,7 @@ export type MonthlyRoster = {
   month: number
   rows: RosterRow[]
   reminders: string[]
+  omittedDays?: number[]
 }
 
 export type ExportFormat = 'docx' | 'xlsx' | 'pdf'

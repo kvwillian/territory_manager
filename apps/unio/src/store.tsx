@@ -1,4 +1,7 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { collection, getDocs, query as queryDocuments, where } from 'firebase/firestore'
+import { db } from './firebase'
+import { meetingFromDocument, mergeMeetings } from './features/meetings/storedMeetings'
 import {
   addDays,
   blankFrom,
@@ -52,7 +55,7 @@ function patchSelected(
   return meetings.map((meeting) => (meeting.id === selectedId ? recipe(meeting) : meeting))
 }
 
-export function MeetingsProvider({ children }: { children: ReactNode }) {
+export function MeetingsProvider({ congregationId, children }: { congregationId: string | null; children: ReactNode }) {
   const [meetings, setMeetings] = useState(seedMeetings)
   const [kind, setKindState] = useState<MeetingKind>('midweek')
   const [month, setMonthState] = useState('2026-10')
@@ -61,6 +64,37 @@ export function MeetingsProvider({ children }: { children: ReactNode }) {
   const [editing, setEditing] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [closedSections, setClosedSections] = useState<string[]>([])
+
+  useEffect(() => {
+    if (!congregationId) return
+    let active = true
+    getDocs(queryDocuments(collection(db, 'meetingPrograms'), where('congregationId', '==', congregationId)))
+      .then((snapshot) => {
+        if (!active) return
+        const loaded = snapshot.docs
+          .map((item) => meetingFromDocument(item.id, item.data() as Record<string, unknown>))
+          .filter((meeting): meeting is NonNullable<typeof meeting> => meeting !== null)
+        if (loaded.length === 0) return
+        setMeetings((current) => {
+          const merged = mergeMeetings(current, loaded)
+          setSelectedId((selected) => {
+            if (merged.some((meeting) => meeting.id === selected)) return selected
+            const previous = current.find((meeting) => meeting.id === selected)
+            const sameDate = previous
+              ? merged.find((meeting) => meeting.kind === previous.kind && meeting.isoDate === previous.isoDate)
+              : undefined
+            return sameDate?.id ?? merged[0]?.id ?? selected
+          })
+          return merged
+        })
+        const months = [...new Set(loaded.map((meeting) => meeting.isoDate.slice(0, 7)))].sort()
+        setMonthState((current) => (months.includes(current) ? current : months[0] ?? current))
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [congregationId])
 
   const visible = useMemo(
     () =>
