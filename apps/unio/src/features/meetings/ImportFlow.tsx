@@ -62,7 +62,8 @@ export function ImportFlow({
   const [confirmAlerts, setConfirmAlerts] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
   const [finishOpen, setFinishOpen] = useState(false)
-  const [busy, setBusy] = useState<'upload' | 'read' | 'accept' | 'cancel' | 'resume' | 'finish' | null>(null)
+  const [busy, setBusy] = useState<'upload' | 'read' | 'accept' | 'accept-all' | 'cancel' | 'resume' | 'finish' | null>(null)
+  const [savingId, setSavingId] = useState<string | null>(null)
 
   async function congregationOf(uid: string) {
     const userSnap = await getDoc(doc(db, 'users', uid))
@@ -157,40 +158,77 @@ export function ImportFlow({
     setWeeks((current) => current.map((week, index) => (index === selected ? recipe(week) : week)))
   }
 
+  async function saveWeek(week: ImportWeek, acknowledgeAlerts: boolean) {
+    const call = httpsCallable<
+      { importId: string; weekId: string; isoDate: string; acknowledgeAlerts: boolean; sections: ImportSection[] },
+      { status: string; meeting?: CongregationMeeting; warnings?: string[] }
+    >(functions, 'acceptMeetingWeek')
+    const result = await call({
+      importId: importId ?? '',
+      weekId: week.id,
+      isoDate: week.isoDate ?? '',
+      acknowledgeAlerts,
+      sections: week.sections,
+    })
+    if (result.data.meeting) onSaved(result.data.meeting)
+    const status: WeekStatus = result.data.status === 'duplicate' ? 'duplicate' : 'accepted'
+    return { status, alerts: result.data.warnings ?? week.alerts }
+  }
+
+  function applySaved(list: ImportWeek[], weekId: string, status: WeekStatus, alerts: string[]) {
+    return list.map((item) => (item.id === weekId ? { ...item, status, alerts } : item))
+  }
+
   async function accept(acknowledgeAlerts: boolean) {
     const week = weeks[selected]
     if (!importId || !week || busy) return
     setError('')
     setBusy('accept')
+    setSavingId(week.id)
     setProgress('Salvando o rascunho da semana…')
     try {
-      const call = httpsCallable<
-        { importId: string; weekId: string; isoDate: string; acknowledgeAlerts: boolean; sections: ImportSection[] },
-        { status: string; meeting?: CongregationMeeting; warnings?: string[] }
-      >(functions, 'acceptMeetingWeek')
-      const result = await call({
-        importId,
-        weekId: week.id,
-        isoDate: week.isoDate ?? '',
-        acknowledgeAlerts,
-        sections: week.sections,
-      })
+      const saved = await saveWeek(week, acknowledgeAlerts)
       setConfirmAlerts(false)
-      if (result.data.meeting) onSaved(result.data.meeting)
-      const nextStatus = result.data.status === 'duplicate' ? 'duplicate' : 'accepted'
-      const nextWeeks = weeks.map((item, index) =>
-        index === selected
-          ? { ...item, status: nextStatus as WeekStatus, alerts: result.data.warnings ?? item.alerts }
-          : item,
-      )
+      const nextWeeks = applySaved(weeks, week.id, saved.status, saved.alerts)
       setWeeks(nextWeeks)
-      const stillOpen = nextWeeks.some((item) => item.status === 'pending' || item.status === 'error')
-      if (!stillOpen) setFinishOpen(true)
+      if (!nextWeeks.some((item) => item.status === 'pending' || item.status === 'error')) setFinishOpen(true)
     } catch (err) {
       const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : ''
       if (code.includes('failed-precondition')) setConfirmAlerts(true)
       setError(messageFrom(err))
     } finally {
+      setSavingId(null)
+      setBusy(null)
+      setProgress('')
+    }
+  }
+
+  async function acceptAll() {
+    if (!importId || busy) return
+    const queue = weeks.filter((item) => item.status === 'pending' || item.status === 'error')
+    if (queue.length === 0) return
+    setError('')
+    setBusy('accept-all')
+    let current = weeks
+    try {
+      for (let index = 0; index < queue.length; index += 1) {
+        const target = current.find((item) => item.id === queue[index].id)
+        if (!target || (target.status !== 'pending' && target.status !== 'error')) continue
+        const position = current.findIndex((item) => item.id === target.id)
+        setSelected(position)
+        setSavingId(target.id)
+        setProgress(`Salvando ${index + 1} de ${queue.length}…`)
+        const saved = await saveWeek(target, false)
+        current = applySaved(current, target.id, saved.status, saved.alerts)
+        setWeeks(current)
+      }
+      if (!current.some((item) => item.status === 'pending' || item.status === 'error')) setFinishOpen(true)
+    } catch (err) {
+      const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : ''
+      if (code.includes('failed-precondition')) setConfirmAlerts(true)
+      setError(messageFrom(err))
+    } finally {
+      setSavingId(null)
       setBusy(null)
       setProgress('')
     }
@@ -318,8 +356,8 @@ export function ImportFlow({
                   >
                     <span className="block text-sm font-medium">{item.label}</span>
                     <span className="inline-flex items-center gap-1 text-xs text-muted">
-                      {busy === 'accept' && index === selected ? <Loader2 size={12} className="animate-spin" /> : null}
-                      {busy === 'accept' && index === selected ? 'Salvando…' : statusText[item.status]}
+                      {savingId === item.id ? <Loader2 size={12} className="animate-spin" /> : null}
+                      {savingId === item.id ? 'Salvando…' : statusText[item.status]}
                     </span>
                   </button>
                 ))}
@@ -431,10 +469,19 @@ export function ImportFlow({
                   type="button"
                   disabled={busy !== null || week.status === 'accepted' || week.status === 'duplicate'}
                   onClick={() => void accept(false)}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-indigo px-4 text-sm font-medium text-white disabled:opacity-50"
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-indigo px-4 text-sm font-medium text-white disabled:opacity-50 mr-2"
                 >
                   {busy === 'accept' ? <Loader2 size={16} className="animate-spin" /> : null}
                   {busy === 'accept' ? 'Salvando rascunho…' : 'Aceitar esta semana'}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy !== null || pending === 0}
+                  onClick={() => void acceptAll()}
+                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-indigo px-4 text-sm font-medium text-indigo disabled:opacity-50"
+                >
+                  {busy === 'accept-all' ? <Loader2 size={16} className="animate-spin" /> : null}
+                  {busy === 'accept-all' ? progress || 'Salvando…' : 'Aceitar todas'}
                 </button>
               </div>
             </div>

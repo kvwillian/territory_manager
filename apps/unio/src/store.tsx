@@ -2,7 +2,9 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from 're
 import {
   addDays,
   blankFrom,
+  isCurrentWeek,
   meetingInStrip,
+  monthKey,
   seedMeetings,
   type CongregationMeeting,
   type MeetingKind,
@@ -22,6 +24,7 @@ type MeetingsContextValue = {
   closedSections: string[]
   setKind: (kind: MeetingKind) => void
   setMonth: (month: string) => void
+  goToToday: () => void
   setQuery: (query: string) => void
   setEditing: (editing: boolean) => void
   toggleSidebar: () => void
@@ -91,6 +94,24 @@ export function MeetingsProvider({ children }: { children: ReactNode }) {
   function setMonth(next: string) {
     setMonthState(next)
     chooseVisible(kind, next)
+  }
+
+  function goToToday() {
+    const today = new Date()
+    const ofKind = meetings
+      .filter((meeting) => meeting.kind === kind)
+      .sort((a, b) => a.isoDate.localeCompare(b.isoDate))
+    const inThisWeek = ofKind.find((meeting) => isCurrentWeek(meeting.isoDate, today))
+    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    const upcoming = ofKind.find((meeting) => meeting.isoDate >= todayIso)
+    const target = inThisWeek ?? upcoming ?? ofKind[ofKind.length - 1]
+    if (target) {
+      setMonthState(target.isoDate.slice(0, 7))
+      setSelectedId(target.id)
+    } else {
+      setMonthState(monthKey(today.getFullYear(), today.getMonth() + 1))
+    }
+    setEditing(false)
   }
 
   function toggleSection(sectionId: string) {
@@ -244,6 +265,7 @@ export function MeetingsProvider({ children }: { children: ReactNode }) {
     closedSections,
     setKind,
     setMonth,
+    goToToday,
     setQuery,
     setEditing,
     toggleSidebar: () => setSidebarCollapsed((current) => !current),

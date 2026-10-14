@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { PlaceholderPage } from './components/PlaceholderPage'
+import { AudioVideoPage } from './features/audio-video/AudioVideoPage'
 import { MeetingsPage } from './features/meetings/MeetingsPage'
 
 export function App() {
@@ -27,15 +28,7 @@ export function App() {
           }
         />
         <Route path="designacoes/reunioes" element={<MeetingsPage />} />
-        <Route
-          path="designacoes/audio-video"
-          element={
-            <PlaceholderPage
-              title="Áudio e Vídeo"
-              body="A escala de operadores entra depois das reuniões. Os dois lugares de cada noite já ficam na própria reunião."
-            />
-          }
-        />
+        <Route path="designacoes/audio-video" element={<AudioVideoPage />} />
         <Route
           path="designacoes/idosos"
           element={

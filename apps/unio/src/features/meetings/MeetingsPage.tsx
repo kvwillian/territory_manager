@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Flag,
   Gem,
   Leaf,
   MoreHorizontal,
@@ -18,6 +19,7 @@ import {
 import {
   dayLine,
   headingDate,
+  isCurrentWeek,
   kindMeta,
   monthTitle,
   shiftMonth,
@@ -80,6 +82,13 @@ export function MeetingsPage() {
           <p className="mt-1 text-sm text-muted">{meta.subtitle}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={store.goToToday}
+            className="h-11 rounded-xl border border-line bg-white px-3 text-sm font-medium hover:border-indigo hover:bg-indigo-soft hover:text-indigo"
+          >
+            Hoje
+          </button>
           {account?.role === 'admin' ? (
             <button
               type="button"
@@ -151,11 +160,17 @@ export function MeetingsPage() {
               key={item.id}
               type="button"
               onClick={() => store.select(item.id)}
-              className={`rounded-2xl border px-4 py-3 text-left ${
+              className={`relative rounded-2xl border px-4 py-3 text-left ${
                 active ? 'border-indigo bg-[#F5F7FF] ring-1 ring-indigo' : 'border-line bg-white hover:border-[#C7D2FE]'
               }`}
             >
-              <span className="block text-sm font-semibold">{weekRangeLabel(item.isoDate)}</span>
+              {isCurrentWeek(item.isoDate) ? (
+                <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-indigo-soft px-2 py-0.5 text-[11px] font-medium text-indigo">
+                  <Flag size={11} />
+                  Hoje
+                </span>
+              ) : null}
+              <span className="block pr-14 text-sm font-semibold">{weekRangeLabel(item.isoDate)}</span>
               <span className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${statusClass[item.status]}`}>
                 {statusLabel[item.status]}
               </span>

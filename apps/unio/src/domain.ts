@@ -126,12 +126,25 @@ export function meetingInStrip(isoDate: string, key: string) {
   return inMonth || inLookahead
 }
 
-export function weekRangeLabel(iso: string) {
+export function weekStart(iso: string) {
   const date = parseIso(iso)
   const weekday = date.getDay()
   const mondayOffset = weekday === 0 ? -6 : 1 - weekday
   const monday = new Date(date)
   monday.setDate(date.getDate() + mondayOffset)
+  monday.setHours(0, 0, 0, 0)
+  return monday
+}
+
+export function isCurrentWeek(iso: string, today = new Date()) {
+  const current = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  return weekStart(iso).getTime() === weekStart(
+    `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`,
+  ).getTime()
+}
+
+export function weekRangeLabel(iso: string) {
+  const monday = weekStart(iso)
   const sunday = new Date(monday)
   sunday.setDate(monday.getDate() + 6)
   const sameMonth = monday.getMonth() === sunday.getMonth()
