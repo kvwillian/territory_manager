@@ -1,11 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'dart:async';
 
 import '../core/constants/app_colors.dart';
-import '../core/constants/app_spacing.dart';
 import '../core/providers/territory_image_provider.dart';
 import '../shared/widgets/sync_status_chip.dart';
 import '../features/admin/providers/assignments_provider.dart';
@@ -13,12 +12,10 @@ import '../features/admin/providers/territories_provider.dart';
 import '../features/meetings/providers/meeting_location_repository_provider.dart';
 import '../core/services/connectivity_service.dart';
 import '../core/services/offline_sync_service.dart';
-import '../features/auth/models/user_model.dart';
 import '../features/auth/providers/auth_provider.dart';
 import '../shared/providers/shell_config_provider.dart';
 
-/// Global layout wrapper with navigation drawer.
-/// Shared across all main authenticated screens.
+/// Shared layout for signed-in screens, with the bottom navigation.
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({
     super.key,
@@ -34,7 +31,6 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   StreamSubscription? _connectivitySubscription;
   Timer? _periodicRefreshTimer;
   bool _syncStarted = false;
@@ -72,13 +68,15 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   String _titleForLocation(String location) {
     if (location == '/home' || location == '/admin') return 'Minha congregação';
+    if (location == '/agenda') return 'Agenda';
+    if (location == '/mapas') return 'Mapas';
+    if (location == '/menu') return 'Menu';
     if (location == '/field') return 'Territórios';
     if (location == '/announcements') return 'Avisos';
     if (location == '/announcements/create') return 'Novo aviso';
     if (location == '/history') return 'Histórico';
     if (location == '/congregation') return 'Reuniões';
     if (location.startsWith('/territory/')) return 'Território';
-    if (location == '/admin') return 'Painel';
     if (location == '/admin/territories') return 'Territórios';
     if (location.startsWith('/admin/territories/create')) return 'Novo Território';
     if (location.startsWith('/admin/territories/edit/')) return 'Editar Território';
@@ -105,7 +103,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       return FloatingActionButton.extended(
         onPressed: () => context.push('/admin/territories/create'),
         icon: const Icon(Icons.add),
-        label: const Text('Novo território'),
+        label: const Text('Novo territÃ³rio'),
       );
     }
     if (location == '/admin/meeting-locations') {
@@ -158,245 +156,93 @@ class _AppShellState extends ConsumerState<AppShell> {
         final user = authState.user;
 
         return Scaffold(
-      key: _scaffoldKey,
-      appBar: AppBar(
-        title: Text(title),
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-        ),
-        actions: const [
-          SyncStatusChip(),
-        ],
-      ),
-      drawer: _AppDrawer(
-        user: user,
-        currentLocation: location,
-        scaffoldContext: context,
-        router: GoRouter.of(context),
-        onSignOut: () => ref.read(authStateProvider.notifier).signOut(),
-      ),
-      body: TerritoryImagePrefetcher(child: widget.child),
-      floatingActionButton: fab,
+          appBar: _isRootTab(location)
+              ? null
+              : AppBar(
+                  title: Text(title),
+                  automaticallyImplyLeading: false,
+                  leading: IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () {
+                      if (router.canPop()) {
+                        router.pop();
+                      } else {
+                        router.go(user.isAdmin ? '/admin' : '/home');
+                      }
+                    },
+                  ),
+                  actions: const [
+                    SyncStatusChip(),
+                  ],
+                ),
+          body: TerritoryImagePrefetcher(child: widget.child),
+          floatingActionButton: fab,
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _tabIndex(location),
+            indicatorColor: AppColors.secondaryPurple,
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            onDestinationSelected: (index) {
+              final path = switch (index) {
+                0 => user.isAdmin ? '/admin' : '/home',
+                1 => '/agenda',
+                2 => '/mapas',
+                _ => '/menu',
+              };
+              router.go(path);
+            },
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home),
+                label: 'InÃ­cio',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.calendar_month_outlined),
+                selectedIcon: Icon(Icons.calendar_month),
+                label: 'Agenda',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.map_outlined),
+                selectedIcon: Icon(Icons.map),
+                label: 'Mapas',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.menu),
+                selectedIcon: Icon(Icons.menu),
+                label: 'Menu',
+              ),
+            ],
+          ),
         );
       },
     );
   }
-}
 
-class _AppDrawer extends StatelessWidget {
-  const _AppDrawer({
-    required this.user,
-    required this.currentLocation,
-    required this.scaffoldContext,
-    required this.router,
-    required this.onSignOut,
-  });
-
-  final UserModel user;
-  final String currentLocation;
-  final BuildContext scaffoldContext;
-  final GoRouter router;
-  final VoidCallback onSignOut;
-
-  @override
-  Widget build(BuildContext context) {
-    final isAdmin = user.isAdmin;
-    final items = isAdmin ? _adminItems : _conductorItems;
-
-    return Drawer(
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _DrawerHeader(user: user),
-            const SizedBox(height: AppSpacing.md),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                children: [
-                  ...items.map(
-                    (item) => _DrawerTile(
-                      icon: item.icon,
-                      label: item.label,
-                      path: item.path,
-                      isSelected: _isSelected(currentLocation, item.path),
-                      onTap: () {
-                        Navigator.of(scaffoldContext).pop();
-                        router.go(item.path);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            ListTile(
-              leading: Icon(
-                Icons.logout,
-                color: AppColors.secondaryText,
-                size: 24,
-              ),
-              title: Text(
-                'Sair',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: AppColors.secondaryText,
-                    ),
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              onTap: () {
-                Navigator.of(scaffoldContext).pop();
-                onSignOut();
-              },
-            ),
-            const SizedBox(height: AppSpacing.sm),
-          ],
-        ),
-      ),
-    );
+  bool _isRootTab(String location) {
+    return location == '/home' ||
+        location == '/admin' ||
+        location == '/agenda' ||
+        location == '/mapas' ||
+        location == '/menu';
   }
 
-  bool _isSelected(String location, String path) {
-    if (path == '/admin') return location == '/admin';
-    if (path == '/home') return location == '/home';
-    if (path == '/history') return location == '/history';
-    return location.startsWith(path);
-  }
-}
-
-const _adminItems = [
-  _DrawerItem(icon: Icons.dashboard_outlined, label: 'Início', path: '/admin'),
-  _DrawerItem(icon: Icons.campaign_outlined, label: 'Avisos', path: '/announcements'),
-  _DrawerItem(icon: Icons.event_outlined, label: 'Reuniões', path: '/congregation'),
-  _DrawerItem(icon: Icons.map_outlined, label: 'Territórios', path: '/admin/territories'),
-  _DrawerItem(icon: Icons.location_city_outlined, label: 'Bairros', path: '/admin/bairros'),
-  _DrawerItem(icon: Icons.place_outlined, label: 'Locais de Saída', path: '/admin/meeting-locations'),
-  _DrawerItem(icon: Icons.groups_outlined, label: 'Grupos de campo', path: '/admin/field-groups'),
-  _DrawerItem(icon: Icons.person_outline, label: 'Usuários', path: '/admin/users'),
-  _DrawerItem(icon: Icons.assignment_outlined, label: 'Designações semanais', path: '/admin/assignments'),
-  _DrawerItem(icon: Icons.history, label: 'Histórico', path: '/admin/history'),
-];
-
-const _conductorItems = [
-  _DrawerItem(icon: Icons.home_outlined, label: 'Início', path: '/home'),
-  _DrawerItem(icon: Icons.campaign_outlined, label: 'Avisos', path: '/announcements'),
-  _DrawerItem(icon: Icons.event_outlined, label: 'Reuniões', path: '/congregation'),
-  _DrawerItem(icon: Icons.history, label: 'Histórico', path: '/history'),
-];
-
-class _DrawerItem {
-  const _DrawerItem({
-    required this.icon,
-    required this.label,
-    required this.path,
-  });
-  final IconData icon;
-  final String label;
-  final String path;
-}
-
-class _DrawerHeader extends StatelessWidget {
-  const _DrawerHeader({required this.user});
-
-  final UserModel user;
-
-  @override
-  Widget build(BuildContext context) {
-    final roleLabel = user.isAdmin ? 'Administrador' : 'Condutor';
-
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: AppColors.secondaryPurple.withValues(alpha: 0.5),
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(16),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 28,
-            backgroundColor: AppColors.primaryPurple.withValues(alpha: 0.2),
-            child: Icon(
-              user.isAdmin ? Icons.admin_panel_settings : Icons.person,
-              size: 32,
-              color: AppColors.primaryPurple,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            user.name,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primaryText,
-                ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm,
-              vertical: AppSpacing.xs,
-            ),
-            decoration: BoxDecoration(
-              color: AppColors.primaryPurple.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              roleLabel,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.primaryPurple,
-                    fontWeight: FontWeight.w500,
-                  ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DrawerTile extends StatelessWidget {
-  const _DrawerTile({
-    required this.icon,
-    required this.label,
-    required this.path,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final String path;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-      child: ListTile(
-        leading: Icon(
-          icon,
-          color: isSelected ? AppColors.primaryPurple : AppColors.secondaryText,
-          size: 24,
-        ),
-        title: Text(
-          label,
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: isSelected ? AppColors.primaryPurple : AppColors.primaryText,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-              ),
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        selected: isSelected,
-        selectedTileColor: AppColors.secondaryPurple,
-        onTap: onTap,
-      ),
-    );
+  int _tabIndex(String location) {
+    if (location == '/agenda' || location.startsWith('/admin/assignments')) {
+      return 1;
+    }
+    if (location == '/mapas' ||
+        location == '/field' ||
+        location.startsWith('/admin/territories')) {
+      return 2;
+    }
+    if (location == '/menu' ||
+        location.startsWith('/admin/') ||
+        location == '/announcements' ||
+        location.startsWith('/announcements/') ||
+        location == '/congregation' ||
+        location == '/history') {
+      return 3;
+    }
+    return 0;
   }
 }

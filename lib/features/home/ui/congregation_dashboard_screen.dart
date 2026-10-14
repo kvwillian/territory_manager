@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../admin/providers/territories_provider.dart';
 import '../../announcements/models/announcement_model.dart';
@@ -45,7 +46,7 @@ class CongregationDashboardScreen extends ConsumerWidget {
         AppSpacing.xl,
       ),
       children: [
-        Text(_greeting(), style: Theme.of(context).textTheme.headlineLarge),
+        Text(_greeting(user.name), style: Theme.of(context).textTheme.headlineLarge),
         const SizedBox(height: AppSpacing.xs),
         Text(
           'Veja o que está acontecendo na congregação.',
@@ -63,6 +64,8 @@ class CongregationDashboardScreen extends ConsumerWidget {
           territoryCount: territoryCount,
           meetingLine: meetingLine,
         ),
+        const SizedBox(height: AppSpacing.lg),
+        _NextAssignmentCard(congregation: congregation.asData?.value),
         const SizedBox(height: AppSpacing.lg),
         _Commitments(congregation: congregation.asData?.value),
         const SizedBox(height: AppSpacing.lg),
@@ -141,9 +144,7 @@ class _QuickAccess extends StatelessWidget {
           icon: Icons.map_outlined,
           background: const Color(0xFFE7F6EE),
           foreground: const Color(0xFF1F8A4C),
-          onTap: () => context.push(
-            user.isAdmin ? '/admin/territories' : '/field',
-          ),
+          onTap: () => context.go('/mapas'),
         ),
       if (user.canAccess(AccessFlags.publishers))
         _QuickTile(
@@ -161,7 +162,7 @@ class _QuickAccess extends StatelessWidget {
           icon: Icons.calendar_month_outlined,
           background: const Color(0xFFE7F0FF),
           foreground: const Color(0xFF3B6FD8),
-          onTap: () => context.push('/congregation'),
+          onTap: () => context.go('/agenda'),
         ),
       if (user.canAccess(AccessFlags.reports))
         _QuickTile(
@@ -211,8 +212,12 @@ class _QuickTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: background,
-      borderRadius: BorderRadius.circular(16),
+      color: AppColors.cardBackground,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: AppColors.border),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
@@ -221,14 +226,93 @@ class _QuickTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: foreground),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: background,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: foreground, size: 20),
+              ),
               const Spacer(),
-              Text(title, style: Theme.of(context).textTheme.titleSmall),
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: AppColors.deepNavy,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
               Text(
                 subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.secondaryText,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NextAssignmentCard extends StatelessWidget {
+  const _NextAssignmentCard({required this.congregation});
+
+  final CongregationModel? congregation;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _meetingItems(congregation);
+    final next = items.isEmpty ? null : items.first;
+    return Material(
+      color: AppColors.vibrantIndigo,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: () => context.go('/agenda'),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Row(
+            children: [
+              const Icon(Icons.menu_book_outlined, color: Colors.white),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Próxima designação',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.85),
+                          ),
+                    ),
+                    Text(
+                      next?.title ?? 'Nenhum horário definido',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    if (next != null)
+                      Text(
+                        next.subtitle,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.9),
+                            ),
+                      ),
+                  ],
+                ),
+              ),
+              Text(
+                'Ver todas',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
               ),
             ],
           ),
@@ -446,9 +530,14 @@ String? _nextMeetingLabel(CongregationModel? congregation) {
   return null;
 }
 
-String _greeting() {
+String _greeting(String name) {
   final hour = DateTime.now().hour;
-  if (hour < 12) return 'Bom dia!';
-  if (hour < 18) return 'Boa tarde!';
-  return 'Boa noite!';
+  final hello = hour < 12
+      ? 'Bom dia'
+      : hour < 18
+          ? 'Boa tarde'
+          : 'Boa noite';
+  final first = name.trim().split(' ').first;
+  if (first.isEmpty) return '$hello!';
+  return '$hello, $first';
 }

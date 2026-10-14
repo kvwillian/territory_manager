@@ -1,23 +1,33 @@
 import 'package:flutter/material.dart';
 
-/// Design system colors for Territory Manager.
-/// Based on calm palette: white, pastel purple, pastel green.
+/// Unio visual tokens.
+/// Deep navy, indigo, violet, cyan, and emerald.
 class AppColors {
   AppColors._();
 
-  // Primary
-  static const Color primaryPurple = Color(0xFF8B7CF6);
-  static const Color secondaryPurple = Color(0xFFF2F1FE);
+  static const Color deepNavy = Color(0xFF0B0E14);
+  static const Color vibrantIndigo = Color(0xFF4F46E5);
+  static const Color richViolet = Color(0xFF8B5CF6);
+  static const Color cyanAccent = Color(0xFF0EA5E9);
+  static const Color emerald = Color(0xFF10B981);
 
-  // Success
-  static const Color successGreen = Color(0xFF7ED9B5);
-  static const Color softGreenBackground = Color(0xFFEAF9F3);
+  static const Color primaryPurple = vibrantIndigo;
+  static const Color secondaryPurple = Color(0xFFEEF2FF);
 
-  // Neutrals
-  static const Color background = Color(0xFFFAFAFC);
-  static const Color neutralGray = Color(0xFFB0B0BC);
+  static const Color successGreen = emerald;
+  static const Color softGreenBackground = Color(0xFFECFDF5);
+
+  static const Color background = Color(0xFFF4F6FB);
+  static const Color neutralGray = Color(0xFF94A3B8);
   static const Color cardBackground = Color(0xFFFFFFFF);
-  static const Color border = Color(0xFFE8E8EF);
-  static const Color primaryText = Color(0xFF2E2E38);
-  static const Color secondaryText = Color(0xFF6B6B7A);
+  static const Color border = Color(0xFFE6E8F0);
+  static const Color primaryText = deepNavy;
+  static const Color secondaryText = Color(0xFF64748B);
+
+  static const Color error = Color(0xFFEF4444);
+  static const Color errorBackground = Color(0xFFFEECEC);
+
+  static const Color progressBlue = Color(0xFF2563EB);
+  static const Color progressBackground = Color(0xFFEFF6FF);
+  static const Color pendingBackground = Color(0xFFF1F5F9);
 }

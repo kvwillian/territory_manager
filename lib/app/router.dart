@@ -7,7 +7,10 @@ import 'package:territory_manager/app/app_shell.dart';
 import 'package:territory_manager/features/announcements/ui/announcement_form_screen.dart';
 import 'package:territory_manager/features/announcements/ui/announcements_list_screen.dart';
 import 'package:territory_manager/features/auth/models/access_flags.dart';
+import 'package:territory_manager/features/home/ui/agenda_screen.dart';
+import 'package:territory_manager/features/home/ui/app_menu_screen.dart';
 import 'package:territory_manager/features/home/ui/congregation_dashboard_screen.dart';
+import 'package:territory_manager/features/home/ui/maps_screen.dart';
 import 'package:territory_manager/features/home/ui/module_soon_screen.dart';
 import 'package:territory_manager/features/admin/ui/assignments_screen.dart';
 import 'package:territory_manager/features/admin/ui/create_user_screen.dart';
@@ -199,6 +202,27 @@ final routerProvider = Provider<GoRouter>((ref) {
                 builder: (context, state) => const ShellRouteConfig(
                   title: 'Territórios',
                   child: HomeScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'agenda',
+                builder: (context, state) => const ShellRouteConfig(
+                  title: 'Agenda',
+                  child: AgendaScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'mapas',
+                builder: (context, state) => const ShellRouteConfig(
+                  title: 'Mapas',
+                  child: MapsScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'menu',
+                builder: (context, state) => const ShellRouteConfig(
+                  title: 'Menu',
+                  child: AppMenuScreen(),
                 ),
               ),
               GoRoute(

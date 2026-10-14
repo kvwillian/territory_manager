@@ -40,9 +40,26 @@ class AppTheme {
         margin: EdgeInsets.zero,
         clipBehavior: Clip.antiAlias,
       ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.vibrantIndigo,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: AppColors.neutralGray.withValues(alpha: 0.35),
+          disabledForegroundColor: Colors.white,
+          minimumSize: const Size(double.infinity, 48),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          elevation: 0,
+        ),
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primaryPurple,
+          backgroundColor: AppColors.vibrantIndigo,
           foregroundColor: Colors.white,
           minimumSize: const Size(double.infinity, 48),
           padding: const EdgeInsets.symmetric(
@@ -50,30 +67,31 @@ class AppTheme {
             vertical: AppSpacing.md,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
           elevation: 0,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.primaryPurple,
-          side: const BorderSide(color: AppColors.primaryPurple),
+          foregroundColor: AppColors.vibrantIndigo,
+          side: const BorderSide(color: AppColors.vibrantIndigo),
           minimumSize: const Size(double.infinity, 48),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: AppColors.primaryPurple,
+          foregroundColor: AppColors.vibrantIndigo,
           minimumSize: const Size(44, 44),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.cardBackground,
+        labelStyle: const TextStyle(color: AppColors.secondaryText),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -83,8 +101,17 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primaryPurple, width: 2),
+          borderSide: const BorderSide(color: AppColors.vibrantIndigo, width: 1.5),
         ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.error),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+        ),
+        errorStyle: const TextStyle(color: AppColors.error),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
           vertical: AppSpacing.md,
@@ -111,8 +138,8 @@ class AppTheme {
     return base.copyWith(
       headlineLarge: base.headlineLarge?.copyWith(
         fontSize: 24,
-        fontWeight: FontWeight.w600,
-        color: AppColors.primaryText,
+        fontWeight: FontWeight.w700,
+        color: AppColors.deepNavy,
       ),
       headlineMedium: base.headlineMedium?.copyWith(
         fontSize: 20,
