@@ -54,5 +54,9 @@ macos/Runner/GoogleService-Info.plist
 functions/node_modules/
 functions/lib/
 
+# Unio web app
+apps/unio/node_modules/
+apps/unio/dist/
+
 # Local secrets (Resend, etc.)
 .env

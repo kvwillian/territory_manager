@@ -8,6 +8,7 @@
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
     "stamp-congregation-ids": "npm run build && node lib/stampCongregationIds.js",
+    "test": "tsx --test test/workbook.test.ts",
     "logs": "firebase functions:log"
   },
   "engines": {
@@ -17,10 +18,12 @@
   "dependencies": {
     "dotenv": "^16.4.7",
     "firebase-admin": "^12.0.0",
-    "firebase-functions": "^5.0.0"
+    "firebase-functions": "^5.0.0",
+    "unpdf": "^1.8.1"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.0.0"
   },
   "private": true

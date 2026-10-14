@@ -45,6 +45,22 @@ service cloud.firestore {
       return isAdmin() && inCongregation(request.resource.data);
     }
 
+    function managesMeetings() {
+      return isAdmin()
+        || (hasProfile()
+          && profile().manageFlags is list
+          && 'meetings' in profile().manageFlags);
+    }
+
+    function canReadMeetingProgram(data) {
+      return inCongregation(data) && (
+        managesMeetings()
+        || (data.status == 'published'
+          && profile().accessFlags is list
+          && 'meetings' in profile().accessFlags)
+      );
+    }
+
     function segmentProgressOnly() {
       return request.resource.data.diff(resource.data).affectedKeys()
         .hasOnly(['status', 'lastWorkedDate']);
@@ -71,7 +87,9 @@ service cloud.firestore {
         && (
           (userId == request.auth.uid
             && request.resource.data.get('accessFlags', null)
-                == resource.data.get('accessFlags', null))
+                == resource.data.get('accessFlags', null)
+            && request.resource.data.get('manageFlags', null)
+                == resource.data.get('manageFlags', null))
           || (isAdmin() && inCongregation(resource.data))
         );
       allow delete: if isAdmin() && inCongregation(resource.data);
@@ -143,6 +161,26 @@ service cloud.firestore {
       allow create: if adminCreates();
       allow update: if adminWritesConfig();
       allow delete: if isAdmin() && inCongregation(resource.data);
+    }
+
+    match /publishers/{publisherId} {
+      allow read: if inCongregation(resource.data)
+        && (isAdmin()
+          || (profile().accessFlags is list
+            && 'publishers' in profile().accessFlags));
+      allow create: if adminCreates();
+      allow update: if adminWritesConfig();
+      allow delete: if isAdmin() && inCongregation(resource.data);
+    }
+
+    match /meetingPrograms/{meetingId} {
+      allow read: if canReadMeetingProgram(resource.data);
+      allow create, update, delete: if false;
+    }
+
+    match /meetingImports/{importId} {
+      allow read: if managesMeetings() && inCongregation(resource.data);
+      allow create, update, delete: if false;
     }
 
     // Apenas Cloud Functions (Admin SDK). Clientes nunca acedem.
