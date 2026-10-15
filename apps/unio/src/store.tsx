@@ -2,8 +2,10 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { collection, doc, getDoc, getDocs, query as queryDocuments, where } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from './firebase'
-import { meetingFromDocument, mergeMeetings } from './features/meetings/storedMeetings'
+import { meetingFromDocument } from './features/meetings/storedMeetings'
+import { clearMeetingDraft, overlayMeetingDrafts, saveMeetingDraft } from './features/meetings/drafts'
 import {
+  alignIsoToWeekday,
   addDays,
   blankFrom,
   congregationProfile,
@@ -11,8 +13,9 @@ import {
   type CongregationProfile,
   isCurrentWeek,
   meetingInStrip,
+  midweekTemplate,
   monthKey,
-  seedMeetings,
+  weekendTemplate,
   withWeekendMeetings,
   type CongregationMeeting,
   type MeetingKind,
@@ -48,10 +51,18 @@ type MeetingsContextValue = {
   removePart: (sectionId: string, partId: string) => void
   addWeek: () => void
   startMeeting: () => void
+  submit: (status: MeetingStatus) => Promise<void>
+  saveError: string
   upsertImportedMeeting: (meeting: CongregationMeeting) => void
 }
 
 const MeetingsContext = createContext<MeetingsContextValue | null>(null)
+
+function keepDraft(meetings: CongregationMeeting[], id: string) {
+  const selected = meetings.find((meeting) => meeting.id === id)
+  if (selected) saveMeetingDraft(selected)
+  return meetings
+}
 
 function patchSelected(
   meetings: CongregationMeeting[],
@@ -62,15 +73,17 @@ function patchSelected(
 }
 
 export function MeetingsProvider({ congregationId, children }: { congregationId: string | null; children: ReactNode }) {
-  const [meetings, setMeetings] = useState(seedMeetings)
+  const [meetings, setMeetings] = useState<CongregationMeeting[]>([])
   const [congregation, setCongregation] = useState<CongregationProfile>({ name: 'Congregação', place: '' })
+  const [schedule, setSchedule] = useState(() => congregationSchedule(undefined))
   const [kind, setKindState] = useState<MeetingKind>('midweek')
-  const [month, setMonthState] = useState('2026-10')
-  const [selectedId, setSelectedId] = useState('midweek-2026-10-14')
+  const [month, setMonthState] = useState(() => monthKey(new Date().getFullYear(), new Date().getMonth() + 1))
+  const [selectedId, setSelectedId] = useState('')
   const [query, setQuery] = useState('')
   const [editing, setEditing] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [closedSections, setClosedSections] = useState<string[]>([])
+  const [saveError, setSaveError] = useState('')
 
   useEffect(() => {
     if (!congregationId) return
@@ -82,22 +95,17 @@ export function MeetingsProvider({ congregationId, children }: { congregationId:
       .then(([congregation, snapshot]) => {
         if (!active) return
         const record = congregation.data() as Record<string, unknown> | undefined
-        const schedule = congregationSchedule(record)
+        const nextSchedule = congregationSchedule(record)
+        setSchedule(nextSchedule)
         setCongregation(congregationProfile(record))
         const loaded = snapshot.docs
           .map((item) => meetingFromDocument(item.id, item.data() as Record<string, unknown>))
           .filter((meeting): meeting is NonNullable<typeof meeting> => meeting !== null)
-        setMeetings((current) => {
-          const merged = withWeekendMeetings(mergeMeetings(current, loaded), schedule)
-          setSelectedId((selected) => {
-            if (merged.some((meeting) => meeting.id === selected)) return selected
-            const previous = current.find((meeting) => meeting.id === selected)
-            const sameDate = previous
-              ? merged.find((meeting) => meeting.kind === previous.kind && meeting.isoDate === previous.isoDate)
-              : undefined
-            return sameDate?.id ?? merged[0]?.id ?? selected
-          })
-          return merged
+        const merged = withWeekendMeetings(overlayMeetingDrafts(loaded), nextSchedule)
+        setMeetings(merged)
+        setSelectedId((selected) => {
+          if (merged.some((meeting) => meeting.id === selected)) return selected
+          return merged[0]?.id ?? ''
         })
         if (loaded.length === 0) return
         const months = [...new Set(loaded.map((meeting) => meeting.isoDate.slice(0, 7)))].sort()
@@ -169,16 +177,15 @@ export function MeetingsProvider({ congregationId, children }: { congregationId:
   }
 
   function setStatus(status: MeetingStatus) {
-    setMeetings((current) => patchSelected(current, selectedId, (meeting) => ({ ...meeting, status })))
+    setMeetings((current) => keepDraft(patchSelected(current, selectedId, (meeting) => ({ ...meeting, status })), selectedId))
   }
 
   function setNotes(notes: string) {
-    setMeetings((current) => patchSelected(current, selectedId, (meeting) => ({ ...meeting, notes })))
+    setMeetings((current) => keepDraft(patchSelected(current, selectedId, (meeting) => ({ ...meeting, notes })), selectedId))
   }
 
   function updatePart(sectionId: string, partId: string, patch: Partial<ProgramPart>) {
-    setMeetings((current) =>
-      patchSelected(current, selectedId, (meeting) => ({
+    setMeetings((current) => keepDraft(patchSelected(current, selectedId, (meeting) => ({
         ...meeting,
         sections: meeting.sections.map((section) =>
           section.id === sectionId
@@ -188,13 +195,12 @@ export function MeetingsProvider({ congregationId, children }: { congregationId:
               }
             : section,
         ),
-      })),
+      })), selectedId)
     )
   }
 
   function updatePartPerson(sectionId: string, partId: string, roleId: string, personName: string) {
-    setMeetings((current) =>
-      patchSelected(current, selectedId, (meeting) => ({
+    setMeetings((current) => keepDraft(patchSelected(current, selectedId, (meeting) => ({
         ...meeting,
         sections: meeting.sections.map((section) =>
           section.id === sectionId
@@ -213,20 +219,19 @@ export function MeetingsProvider({ congregationId, children }: { congregationId:
               }
             : section,
         ),
-      })),
+      })), selectedId)
     )
   }
 
   function updateDutyPerson(dutyId: string, index: number, personName: string) {
-    setMeetings((current) =>
-      patchSelected(current, selectedId, (meeting) => ({
+    setMeetings((current) => keepDraft(patchSelected(current, selectedId, (meeting) => ({
         ...meeting,
         duties: meeting.duties.map((duty) =>
           duty.id === dutyId
             ? { ...duty, people: duty.people.map((person, personIndex) => (personIndex === index ? personName : person)) }
             : duty,
         ),
-      })),
+      })), selectedId)
     )
   }
 
@@ -238,8 +243,7 @@ export function MeetingsProvider({ congregationId, children }: { congregationId:
       durationMinutes: 5,
       roles: [{ id: `${id}-role`, label: 'Participante', showLabel: false, personName: '' }],
     }
-    setMeetings((current) =>
-      patchSelected(current, selectedId, (meeting) => ({
+    setMeetings((current) => keepDraft(patchSelected(current, selectedId, (meeting) => ({
         ...meeting,
         sections: meeting.sections.map((section) => {
           if (section.id !== sectionId) return section
@@ -249,39 +253,67 @@ export function MeetingsProvider({ congregationId, children }: { congregationId:
           else parts.splice(pinnedIndex, 0, created)
           return { ...section, parts }
         }),
-      })),
+      })), selectedId)
     )
   }
 
   function removePart(sectionId: string, partId: string) {
-    setMeetings((current) =>
-      patchSelected(current, selectedId, (meeting) => ({
+    setMeetings((current) => keepDraft(patchSelected(current, selectedId, (meeting) => ({
         ...meeting,
         sections: meeting.sections.map((section) =>
           section.id === sectionId
             ? { ...section, parts: section.parts.filter((item) => item.id !== partId) }
             : section,
         ),
-      })),
+      })), selectedId)
     )
   }
 
   function addWeek() {
+    if (!congregationId) return
     const ofKind = meetings.filter((meeting) => meeting.kind === kind)
-    const last = ofKind.reduce((current, meeting) => (meeting.isoDate > current.isoDate ? meeting : current))
-    const iso = addDays(last.isoDate, 7)
+    const today = new Date()
+    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    const latest = ofKind.length === 0 ? undefined : ofKind.reduce((current, meeting) => (meeting.isoDate > current.isoDate ? meeting : current))
+    const iso = latest
+      ? addDays(latest.isoDate, 7)
+      : alignIsoToWeekday(todayIso, kind === 'midweek' ? schedule.midweekWeekday : schedule.weekendWeekday)
     const existing = meetings.find((meeting) => meeting.kind === kind && meeting.isoDate === iso)
     if (existing) {
       select(existing.id)
-      const date = existing.isoDate
-      setMonthState(`${date.slice(0, 7)}`)
+      setMonthState(existing.isoDate.slice(0, 7))
       return
     }
-    const created = blankFrom(last, iso)
+    const created = !latest
+      ? (kind === 'midweek' ? midweekTemplate(iso, 'draft') : weekendTemplate(iso, 'draft'))
+      : blankFrom(latest, iso)
+    created.id = `${created.kind}_${congregationId}_${iso}`
+    saveMeetingDraft(created)
     setMeetings((current) => [...current, created])
     setSelectedId(created.id)
     setMonthState(created.isoDate.slice(0, 7))
     setEditing(true)
+  }
+
+  async function submit(status: MeetingStatus) {
+    if (!congregationId) return
+    const meeting = meetings.find((item) => item.id === selectedId)
+    if (!meeting) return
+    const payload = { ...meeting, status, id: `${meeting.kind}_${congregationId}_${meeting.isoDate}` }
+    setSaveError('')
+    try {
+      const result = await httpsCallable(functions, 'saveMeetingProgram')({ meeting: payload })
+      const data = result.data as Record<string, unknown>
+      const saved = meetingFromDocument(String(data.id), data)
+      if (!saved) return
+      clearMeetingDraft(meeting.id)
+      clearMeetingDraft(saved.id)
+      setMeetings((current) => current.map((item) => (item.id === meeting.id || item.id === saved.id ? saved : item)))
+      setSelectedId(saved.id)
+      setEditing(false)
+    } catch {
+      setSaveError('Não foi possível enviar a reunião. O rascunho continua neste navegador.')
+    }
   }
 
   function startMeeting() {
@@ -329,6 +361,8 @@ export function MeetingsProvider({ congregationId, children }: { congregationId:
     removePart,
     addWeek,
     startMeeting,
+    submit,
+    saveError,
     upsertImportedMeeting,
   }
 

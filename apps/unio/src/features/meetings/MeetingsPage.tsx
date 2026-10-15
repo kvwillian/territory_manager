@@ -85,6 +85,7 @@ export function MeetingsPage() {
         <div>
           <h1 className="text-[28px] font-semibold tracking-tight">{meta.title}</h1>
           <p className="mt-1 text-sm text-muted">{meta.subtitle}</p>
+          {store.saveError ? <p className="mt-2 text-sm text-[#9F1239]">{store.saveError}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -232,8 +233,7 @@ export function MeetingsPage() {
                       {meeting.status !== 'published' ? (
                         <MenuItem
                           onClick={() => {
-                            store.setStatus('published')
-                            store.setEditing(false)
+                            void store.submit('published')
                             setMenuOpen(false)
                           }}
                         >
@@ -243,7 +243,7 @@ export function MeetingsPage() {
                       {meeting.status === 'published' ? (
                         <MenuItem
                           onClick={() => {
-                            store.setStatus('completed')
+                            void store.submit('completed')
                             setMenuOpen(false)
                           }}
                         >
@@ -253,7 +253,7 @@ export function MeetingsPage() {
                       {meeting.status !== 'draft' ? (
                         <MenuItem
                           onClick={() => {
-                            store.setStatus('draft')
+                            void store.submit('draft')
                             setMenuOpen(false)
                           }}
                         >
@@ -284,7 +284,7 @@ export function MeetingsPage() {
                 )}
               </div>
             </header>
-            <div className="space-y-3 px-4 pb-4">
+            <div className="space-y-3 px-4 pb-4 [overflow-anchor:none]">
               {meeting.sections.map((section) => (
                 <SectionBlock
                   key={section.id}

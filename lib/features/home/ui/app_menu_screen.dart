@@ -72,6 +72,9 @@ class _MenuItem {
 const _adminItems = [
   _MenuItem(Icons.campaign_outlined, 'Avisos', '/announcements'),
   _MenuItem(Icons.event_outlined, 'Horários das reuniões', '/congregation'),
+  _MenuItem(Icons.groups_outlined, 'Grupos de publicadores', '/publisher-groups'),
+  _MenuItem(Icons.mic_none_outlined, 'Áudio e vídeo', '/audio-video'),
+  _MenuItem(Icons.cleaning_services_outlined, 'Limpeza', '/cleaning'),
   _MenuItem(Icons.location_city_outlined, 'Bairros', '/admin/bairros'),
   _MenuItem(Icons.place_outlined, 'Locais de saída', '/admin/meeting-locations'),
   _MenuItem(Icons.groups_outlined, 'Grupos de campo', '/admin/field-groups'),
@@ -82,5 +85,8 @@ const _adminItems = [
 const _conductorItems = [
   _MenuItem(Icons.campaign_outlined, 'Avisos', '/announcements'),
   _MenuItem(Icons.event_outlined, 'Horários das reuniões', '/congregation'),
+  _MenuItem(Icons.groups_outlined, 'Grupos de publicadores', '/publisher-groups'),
+  _MenuItem(Icons.mic_none_outlined, 'Áudio e vídeo', '/audio-video'),
+  _MenuItem(Icons.cleaning_services_outlined, 'Limpeza', '/cleaning'),
   _MenuItem(Icons.history, 'Histórico', '/history'),
 ];

@@ -18,6 +18,12 @@ export type PublisherRecord = {
   indicador: boolean
   microfone: boolean
   som: boolean
+  estudante: boolean
+  volante: boolean
+  needsElderlySupport: boolean
+  driver: boolean
+  gender?: "feminino" | "masculino"
+  age?: number
   createdAt: string
   updatedAt: string
 }
@@ -120,6 +126,10 @@ export async function createPublisher(deps: PublisherDeps, caller: PublisherCall
     indicador: input.indicador === true,
     microfone: input.microfone === true,
     som: input.som === true,
+    estudante: input.estudante === true,
+    volante: input.volante === true,
+    needsElderlySupport: input.needsElderlySupport === true,
+    driver: input.driver === true,
     createdAt: now,
     updatedAt: now,
   }
@@ -129,6 +139,9 @@ export async function createPublisher(deps: PublisherDeps, caller: PublisherCall
   if (phone) publisher.phone = phone
   if (email) publisher.email = email
   if (userId) publisher.userId = userId
+  const gender = input.gender === "feminino" || input.gender === "masculino" ? input.gender : undefined
+  if (gender) publisher.gender = gender
+  if (typeof input.age === "number" && input.age >= 1 && input.age <= 120) publisher.age = Math.round(input.age)
   if (input.groupId != null) await assertSameCongregationGroup(deps, congregationId, input.groupId)
   if (typeof input.groupId === "string" && input.groupId) publisher.groupId = input.groupId
   await deps.store.createPublisher(publisher)
@@ -155,6 +168,13 @@ export async function updatePublisher(deps: PublisherDeps, caller: PublisherCall
   if (input.indicador !== undefined) publisher.indicador = input.indicador === true
   if (input.microfone !== undefined) publisher.microfone = input.microfone === true
   if (input.som !== undefined) publisher.som = input.som === true
+  if (input.estudante !== undefined) publisher.estudante = input.estudante === true
+  if (input.volante !== undefined) publisher.volante = input.volante === true
+  if (input.needsElderlySupport !== undefined) publisher.needsElderlySupport = input.needsElderlySupport === true
+  if (input.driver !== undefined) publisher.driver = input.driver === true
+  if (input.gender === "feminino" || input.gender === "masculino") publisher.gender = input.gender
+  if (input.age === null) delete publisher.age
+  if (typeof input.age === "number" && input.age >= 1 && input.age <= 120) publisher.age = Math.round(input.age)
   publisher.updatedAt = deps.now().toISOString()
   await deps.store.savePublisher(publisher)
   return publisher

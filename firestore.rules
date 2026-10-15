@@ -74,13 +74,12 @@ service cloud.firestore {
           && 'elderlySupport' in profile().manageFlags);
     }
 
+    function canReadAssignments(data) {
+      return inCongregation(data);
+    }
+
     function canReadMeetingProgram(data) {
-      return inCongregation(data) && (
-        managesMeetings()
-        || (data.status == 'published'
-          && profile().accessFlags is list
-          && 'meetings' in profile().accessFlags)
-      );
+      return canReadAssignments(data);
     }
 
     function segmentProgressOnly() {
@@ -220,7 +219,17 @@ service cloud.firestore {
 
     // Escalas de suporte a idosos. Escrita só pelas Cloud Functions.
     match /elderlySupportSchedules/{scheduleId} {
-      allow read: if managesElderlySupport() && inCongregation(resource.data);
+      allow read: if canReadAssignments(resource.data);
+      allow create, update, delete: if false;
+    }
+
+    match /audioVideoRosters/{rosterId} {
+      allow read: if canReadAssignments(resource.data);
+      allow create, update, delete: if false;
+    }
+
+    match /cleaningAssignments/{congregationId} {
+      allow read: if hasProfile() && congregationId == profile().congregationId;
       allow create, update, delete: if false;
     }
 

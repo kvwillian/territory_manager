@@ -1,6 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { collection, getDocs, query, where } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import { Download, Flag, Loader2, Trash2, Upload } from 'lucide-react'
 import { useAccount } from '../../auth'
+import { db, functions } from '../../firebase'
 import { meetingDatesInMonth } from '../../domain'
 import { useMeetings } from '../../store'
 import { AssigneeField } from './AssigneeField'
@@ -11,13 +14,14 @@ import {
   addRosterDay,
   assignSlot,
   emptyRoster,
-  loadRosters,
+  loadRosterDrafts,
   monthNames,
   parseRosterText,
   removeRosterDay,
   rosterKey,
   rosterRowsForMeetings,
-  saveRosters,
+  clearRosterDraft,
+  saveRosterDraft,
   type MonthlyRoster,
   type RosterField,
   type RosterRow,
@@ -26,7 +30,9 @@ import {
 export function AudioVideoPage() {
   const account = useAccount()
   const isAdmin = account?.role === 'admin'
-  const [rosters, setRosters] = useState<MonthlyRoster[]>(() => loadRosters())
+  const [rosters, setRosters] = useState<MonthlyRoster[]>([])
+  const [drafts, setDrafts] = useState<Record<string, MonthlyRoster>>(() => loadRosterDrafts())
+  const [sending, setSending] = useState(false)
   const [monthKey, setMonthKey] = useState(() => {
     const now = new Date()
     return rosterKey(now.getFullYear(), now.getMonth() + 1)
@@ -44,10 +50,27 @@ export function AudioVideoPage() {
   const publisherStatus = 'ready' as const
   const { meetings } = useMeetings()
 
-  const roster = useMemo(
+  useEffect(() => {
+    if (!account?.congregationId) return
+    let active = true
+    getDocs(query(collection(db, 'audioVideoRosters'), where('congregationId', '==', account.congregationId)))
+      .then((snapshot) => {
+        if (!active) return
+        setRosters(snapshot.docs.map((item) => item.data() as MonthlyRoster))
+      })
+      .catch(() => {
+        if (active) setError('Não foi possível carregar a escala.')
+      })
+    return () => {
+      active = false
+    }
+  }, [account?.congregationId])
+
+  const stored = useMemo(
     () => rosters.find((item) => rosterKey(item.year, item.month) === monthKey) ?? emptyFromKey(monthKey),
     [rosters, monthKey],
   )
+  const roster = drafts[monthKey] ?? stored
   const displayRoster = useMemo(
     () => ({ ...roster, rows: rosterRowsForMeetings(roster, meetingDatesInMonth(meetings, monthKey)) }),
     [roster, meetings, monthKey],
@@ -58,14 +81,25 @@ export function AudioVideoPage() {
     ? displayRoster.rows.find((row) => row.day >= today.getDate())
     : undefined
 
-  function persist(next: MonthlyRoster[]) {
-    setRosters(next)
-    saveRosters(next)
+  function saveRoster(next: MonthlyRoster) {
+    saveRosterDraft(next)
+    setDrafts(loadRosterDrafts())
   }
 
-  function saveRoster(next: MonthlyRoster) {
-    const key = rosterKey(next.year, next.month)
-    persist([...rosters.filter((item) => rosterKey(item.year, item.month) !== key), next])
+  async function sendRoster() {
+    setError('')
+    setSending(true)
+    try {
+      const result = await httpsCallable(functions, 'saveAudioVideoRoster')({ roster: displayRoster })
+      const saved = result.data as MonthlyRoster
+      clearRosterDraft(saved.year, saved.month)
+      setDrafts(loadRosterDrafts())
+      setRosters((current) => [...current.filter((item) => rosterKey(item.year, item.month) !== rosterKey(saved.year, saved.month)), saved])
+    } catch {
+      setError('Não foi possível enviar a escala. O rascunho continua neste navegador.')
+    } finally {
+      setSending(false)
+    }
   }
 
   function shift(delta: number) {
@@ -98,10 +132,8 @@ export function AudioVideoPage() {
 
   function saveDraft() {
     if (!draft) return
-    const key = rosterKey(draft.year, draft.month)
-    const next = rosters.filter((item) => rosterKey(item.year, item.month) !== key)
-    persist([...next, draft])
-    setMonthKey(key)
+    saveRoster(draft)
+    setMonthKey(rosterKey(draft.year, draft.month))
     setDraft(null)
     setAlerts([])
     setImporting(false)
@@ -174,6 +206,15 @@ export function AudioVideoPage() {
           >
             {exporting === 'month' ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
             {exporting === 'month' ? 'Gerando…' : 'Exportar mês'}
+          </button>
+          <button
+            type="button"
+            disabled={sending || displayRoster.rows.length === 0}
+            onClick={() => void sendRoster()}
+            className="inline-flex h-11 items-center gap-2 rounded-xl bg-indigo px-3 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {sending ? <Loader2 size={16} className="animate-spin" /> : null}
+            {sending ? 'Enviando…' : 'Enviar mês'}
           </button>
         </div>
       </div>

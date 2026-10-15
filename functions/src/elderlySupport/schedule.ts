@@ -122,6 +122,13 @@ function assignmentFromData(value: unknown): ElderlyAssignment {
   return assignment
 }
 
+function requireMember(caller: ElderlyCaller) {
+  if (typeof caller?.congregationId !== "string" || caller.congregationId.length === 0) {
+    throw new ElderlySupportError("permission-denied", "Esta conta não está ligada a uma congregação.")
+  }
+  return { uid: caller.uid, congregationId: caller.congregationId }
+}
+
 function requireManager(caller: ElderlyCaller) {
   if (!canManageElderlySupport(caller) || !caller.congregationId) {
     throw new ElderlySupportError(
@@ -284,12 +291,12 @@ export async function listSchedules(
   caller: ElderlyCaller,
   input: { congregationId?: unknown; from?: unknown; to?: unknown },
 ) {
-  const manager = requireManager(caller)
-  assertSameCongregation(manager.congregationId, input.congregationId)
+  const member = requireMember(caller)
+  assertSameCongregation(member.congregationId, input.congregationId)
   const from = assertIsoDate(input.from, "O início do período")
   const to = assertIsoDate(input.to, "O fim do período")
   if (from > to) throw new ElderlySupportError("invalid-argument", "O período informado é inválido.")
-  const schedules = await deps.store.listByCongregation(manager.congregationId)
+  const schedules = await deps.store.listByCongregation(member.congregationId)
   return schedules
     .filter((schedule) => overlapsPeriod(schedule, from, to))
     .sort((a, b) => {
@@ -305,8 +312,8 @@ export async function getSchedule(
   caller: ElderlyCaller,
   input: { scheduleId?: unknown },
 ) {
-  const manager = requireManager(caller)
-  return loadOwned(deps, manager.congregationId, input.scheduleId)
+  const member = requireMember(caller)
+  return loadOwned(deps, member.congregationId, input.scheduleId)
 }
 
 export async function updateAssignments(

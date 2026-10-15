@@ -37,11 +37,17 @@ class PublisherModel {
     this.indicador = false,
     this.microfone = false,
     this.som = false,
+    this.estudante = false,
+    this.volante = false,
+    this.needsElderlySupport = false,
+    this.driver = false,
     this.congregationId,
     this.phone,
     this.email,
     this.groupId,
     this.userId,
+    this.gender,
+    this.age,
     this.status = 'active',
   });
 
@@ -52,11 +58,17 @@ class PublisherModel {
   final bool indicador;
   final bool microfone;
   final bool som;
+  final bool estudante;
+  final bool volante;
+  final bool needsElderlySupport;
+  final bool driver;
   final String? congregationId;
   final String? phone;
   final String? email;
   final String? groupId;
   final String? userId;
+  final String? gender;
+  final int? age;
   final String status;
 
   String get subtitle {
@@ -72,11 +84,17 @@ class PublisherModel {
     bool? indicador,
     bool? microfone,
     bool? som,
+    bool? estudante,
+    bool? volante,
+    bool? needsElderlySupport,
+    bool? driver,
     String? congregationId,
     String? phone,
     String? email,
     String? groupId,
     String? userId,
+    String? gender,
+    int? age,
     String? status,
   }) {
     return PublisherModel(
@@ -87,11 +105,17 @@ class PublisherModel {
       indicador: indicador ?? this.indicador,
       microfone: microfone ?? this.microfone,
       som: som ?? this.som,
+      estudante: estudante ?? this.estudante,
+      volante: volante ?? this.volante,
+      needsElderlySupport: needsElderlySupport ?? this.needsElderlySupport,
+      driver: driver ?? this.driver,
       congregationId: congregationId ?? this.congregationId,
       phone: phone ?? this.phone,
       email: email ?? this.email,
       groupId: groupId ?? this.groupId,
       userId: userId ?? this.userId,
+      gender: gender ?? this.gender,
+      age: age ?? this.age,
       status: status ?? this.status,
     );
   }

@@ -25,6 +25,12 @@ class _PublisherFormScreenState extends ConsumerState<PublisherFormScreen> {
   bool _indicador = false;
   bool _microfone = false;
   bool _som = false;
+  bool _estudante = false;
+  bool _volante = false;
+  bool _needsElderlySupport = false;
+  bool _driver = false;
+  String? _gender;
+  int? _age;
   bool _loading = false;
   bool _ready = false;
 
@@ -44,6 +50,12 @@ class _PublisherFormScreenState extends ConsumerState<PublisherFormScreen> {
     _indicador = publisher.indicador;
     _microfone = publisher.microfone;
     _som = publisher.som;
+    _estudante = publisher.estudante;
+    _volante = publisher.volante;
+    _needsElderlySupport = publisher.needsElderlySupport;
+    _driver = publisher.driver;
+    _gender = publisher.gender;
+    _age = publisher.age;
     _ready = true;
   }
 
@@ -59,6 +71,12 @@ class _PublisherFormScreenState extends ConsumerState<PublisherFormScreen> {
       indicador: _indicador,
       microfone: _microfone,
       som: _som,
+      estudante: _estudante,
+      volante: _volante,
+      needsElderlySupport: _needsElderlySupport,
+      driver: _driver,
+      gender: _gender,
+      age: _age,
     );
     try {
       if (_isEdit) {
@@ -165,6 +183,30 @@ class _PublisherFormScreenState extends ConsumerState<PublisherFormScreen> {
                     subtitle: const Text('Pode ser designado no volante e na mesa de som'),
                     value: _som,
                     onChanged: (value) => setState(() => _som = value ?? false),
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Estudante'),
+                    value: _estudante,
+                    onChanged: (value) => setState(() => _estudante = value ?? false),
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Volante'),
+                    value: _volante,
+                    onChanged: (value) => setState(() => _volante = value ?? false),
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Precisa de apoio'),
+                    value: _needsElderlySupport,
+                    onChanged: (value) => setState(() => _needsElderlySupport = value ?? false),
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Motorista'),
+                    value: _driver,
+                    onChanged: (value) => setState(() => _driver = value ?? false),
                   ),
                 ],
               ),

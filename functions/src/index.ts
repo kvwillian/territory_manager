@@ -451,6 +451,12 @@ export {
 } from "./elderlySupport";
 
 export {
+  saveMeetingProgram,
+  saveAudioVideoRoster,
+  saveCleaningAssignment,
+} from "./boards";
+
+export {
   createPublisherAccount,
   updatePublisherAccount,
   listPublisherAccounts,

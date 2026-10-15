@@ -16,7 +16,7 @@ import {
 import { meetingDatesInMonth, monthTitle, shiftMonth } from '../../domain'
 import { useAccount } from '../../auth'
 import { useMeetings } from '../../store'
-import { usePublishers } from '../audio-video/publishers'
+import { usePublisherCatalog } from '../publishers/catalog'
 import {
   callErrorMessage,
   createSchedule,
@@ -51,7 +51,9 @@ export function ElderlySupportPage() {
   const account = useAccount()
   const { meetings, query } = useMeetings()
   const allowed = account ? canManageElderlySupport(account) : false
-  const { publishers, status: publisherStatus } = usePublishers(account?.congregationId ?? null)
+  const { publishers } = usePublisherCatalog()
+  const elderlyPeople = publishers.filter((publisher) => publisher.status === 'active' && publisher.needsElderlySupport)
+  const drivers = publishers.filter((publisher) => publisher.status === 'active' && publisher.driver)
   const [monthKey, setMonthKey] = useState(currentMonthKey)
   const [schedules, setSchedules] = useState<ElderlySchedule[]>([])
   const [schedule, setSchedule] = useState<ElderlySchedule | null>(null)
@@ -441,8 +443,9 @@ export function ElderlySupportPage() {
                         <PersonField
                           value={row.elderlyName}
                           label={`Idoso em ${displayDate(row.date)}`}
-                          publishers={publishers}
-                          publisherStatus={publisherStatus}
+                          publishers={elderlyPeople}
+                          publisherStatus="ready"
+                          emptyMessage="Ninguém marcado como precisa de apoio."
                           onCommit={(person) => updateRow(row.key, 'elderly', person)}
                         />
                       ) : row.elderlyName ? (
@@ -459,8 +462,9 @@ export function ElderlySupportPage() {
                         <PersonField
                           value={row.driverName}
                           label={`Motorista em ${displayDate(row.date)}`}
-                          publishers={publishers}
-                          publisherStatus={publisherStatus}
+                          publishers={drivers}
+                          publisherStatus="ready"
+                          emptyMessage="Ninguém marcado como motorista."
                           onCommit={(person) => updateRow(row.key, 'driver', person)}
                         />
                       ) : row.driverName ? (

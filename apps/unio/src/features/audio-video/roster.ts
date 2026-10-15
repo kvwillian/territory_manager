@@ -150,20 +150,29 @@ export function parseRosterText(text: string, fallbackYear: number): { roster: M
   }
 }
 
-export function loadRosters(): MonthlyRoster[] {
+const draftKey = 'unio-av-drafts'
+
+export function loadRosterDrafts(): Record<string, MonthlyRoster> {
   try {
-    const raw = localStorage.getItem('unio-av-rosters')
-    if (!raw) return [october2026Roster]
-    const parsed = JSON.parse(raw) as MonthlyRoster[]
-    if (!Array.isArray(parsed) || parsed.length === 0) return [october2026Roster]
-    return parsed
+    const raw = localStorage.getItem(draftKey)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as Record<string, MonthlyRoster>
+    return parsed && typeof parsed === 'object' ? parsed : {}
   } catch {
-    return [october2026Roster]
+    return {}
   }
 }
 
-export function saveRosters(rosters: MonthlyRoster[]) {
-  localStorage.setItem('unio-av-rosters', JSON.stringify(rosters))
+export function saveRosterDraft(roster: MonthlyRoster) {
+  const drafts = loadRosterDrafts()
+  drafts[rosterKey(roster.year, roster.month)] = roster
+  localStorage.setItem(draftKey, JSON.stringify(drafts))
+}
+
+export function clearRosterDraft(year: number, month: number) {
+  const drafts = loadRosterDrafts()
+  delete drafts[rosterKey(year, month)]
+  localStorage.setItem(draftKey, JSON.stringify(drafts))
 }
 
 export type RosterField = 'attendants' | 'microphones' | 'sound'

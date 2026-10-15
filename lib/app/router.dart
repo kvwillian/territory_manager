@@ -7,6 +7,7 @@ import 'package:territory_manager/app/app_shell.dart';
 import 'package:territory_manager/features/announcements/ui/announcement_form_screen.dart';
 import 'package:territory_manager/features/announcements/ui/announcements_list_screen.dart';
 import 'package:territory_manager/features/auth/models/access_flags.dart';
+import 'package:territory_manager/features/designations/ui/designation_screens.dart';
 import 'package:territory_manager/features/home/ui/agenda_screen.dart';
 import 'package:territory_manager/features/home/ui/app_menu_screen.dart';
 import 'package:territory_manager/features/home/ui/congregation_dashboard_screen.dart';
@@ -14,6 +15,7 @@ import 'package:territory_manager/features/home/ui/maps_screen.dart';
 import 'package:territory_manager/features/home/ui/module_soon_screen.dart';
 import 'package:territory_manager/features/publishers/ui/publisher_form_screen.dart';
 import 'package:territory_manager/features/publishers/ui/publishers_list_screen.dart';
+import 'package:territory_manager/features/publisher_groups/ui/publisher_groups_screen.dart';
 import 'package:territory_manager/features/admin/ui/assignments_screen.dart';
 import 'package:territory_manager/features/admin/ui/create_user_screen.dart';
 import 'package:territory_manager/features/admin/ui/history_screen.dart';
@@ -365,6 +367,27 @@ final routerProvider = Provider<GoRouter>((ref) {
                 builder: (context, state) => const ShellRouteConfig(
                   title: 'Novo aviso',
                   child: AnnouncementFormScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'audio-video',
+                builder: (context, state) => const ShellRouteConfig(
+                  title: 'Áudio e vídeo',
+                  child: AudioVideoRosterScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'cleaning',
+                builder: (context, state) => const ShellRouteConfig(
+                  title: 'Limpeza',
+                  child: CleaningAssignmentsScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'publisher-groups',
+                builder: (context, state) => const ShellRouteConfig(
+                  title: 'Grupos',
+                  child: PublisherGroupsScreen(),
                 ),
               ),
               GoRoute(

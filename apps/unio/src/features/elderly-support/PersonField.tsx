@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2 } from 'lucide-react'
-import type { CongregationPublisher } from '../audio-video/publishers'
 import { avatarTone, initials } from './model'
 
 export function PersonField({
@@ -9,12 +8,14 @@ export function PersonField({
   label,
   publishers,
   publisherStatus,
+  emptyMessage = 'Nenhum publicador encontrado.',
   onCommit,
 }: {
   value: string
   label: string
-  publishers: CongregationPublisher[]
+  publishers: { id: string; name: string }[]
   publisherStatus: 'loading' | 'ready' | 'error'
+  emptyMessage?: string
   onCommit: (person: { name: string; publisherId?: string }) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -141,6 +142,8 @@ export function PersonField({
                 </li>
               ) : publisherStatus === 'error' ? (
                 <li className="px-3 py-2 text-xs text-[#9F1239]">Não foi possível carregar os publicadores.</li>
+              ) : publishers.length === 0 ? (
+                <li className="px-3 py-2 text-xs text-muted">{emptyMessage}</li>
               ) : visible.length === 0 ? (
                 <li className="px-3 py-2 text-xs text-muted">Nenhum publicador encontrado.</li>
               ) : (

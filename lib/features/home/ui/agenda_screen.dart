@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../shared/widgets/status_badge.dart';
+import '../../meeting_programs/models/meeting_program.dart';
+import '../../meeting_programs/providers/meeting_programs_provider.dart';
 import '../data/agenda_mock.dart';
 
 /// Agenda tab: week strip and the selected day's program.
-class AgendaScreen extends StatefulWidget {
+class AgendaScreen extends ConsumerStatefulWidget {
   const AgendaScreen({super.key});
 
   @override
-  State<AgendaScreen> createState() => _AgendaScreenState();
+  ConsumerState<AgendaScreen> createState() => _AgendaScreenState();
 }
 
-class _AgendaScreenState extends State<AgendaScreen> {
+class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   late DateTime _selected;
 
   static const _weekdayInitials = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
@@ -58,7 +61,11 @@ class _AgendaScreenState extends State<AgendaScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final program = AgendaMock.programFor(_selected);
+    final meetings = ref.watch(meetingProgramsProvider);
+    final program = meetings.maybeWhen(
+      data: (items) => items.where((item) => item.isOn(_selected)).toList(),
+      orElse: () => const <MeetingProgram>[],
+    );
     final upcoming = AgendaMock.upcomingFrom(_selected);
     final important = AgendaMock.importantFrom(_selected);
 
@@ -115,12 +122,19 @@ class _AgendaScreenState extends State<AgendaScreen> {
         const SizedBox(height: AppSpacing.lg),
         _SectionTitle(title: 'Programação do dia'),
         const SizedBox(height: AppSpacing.sm),
-        if (program.isEmpty)
+        if (meetings.isLoading)
+          const Padding(
+            padding: EdgeInsets.only(bottom: AppSpacing.md),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (meetings.hasError)
+          const _EmptyDay(message: 'Não foi possível carregar as reuniões.')
+        else if (program.isEmpty)
           const _EmptyDay()
         else
           ...program.map((item) => Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                child: _ProgramCard(item: item),
+                child: _MeetingCard(meeting: item),
               )),
         const SizedBox(height: AppSpacing.sm),
         const _SectionTitle(title: 'Próximos compromissos', trailing: 'Ver todos'),
@@ -299,74 +313,6 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-class _ProgramCard extends StatelessWidget {
-  const _ProgramCard({required this.item});
-
-  final AgendaItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: item.accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(item.icon, color: item.accent),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.time,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.secondaryText,
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                Text(
-                  item.title,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.deepNavy,
-                      ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  item.place,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-          if (item.badge != null) ...[
-            const SizedBox(width: AppSpacing.sm),
-            StatusBadge(
-              label: item.badge!,
-              tone: item.badge == 'Designado'
-                  ? StatusTone.available
-                  : StatusTone.available,
-            ),
-          ],
-          const Icon(Icons.chevron_right, color: AppColors.neutralGray),
-        ],
-      ),
-    );
-  }
-}
-
 class _UpcomingCard extends StatelessWidget {
   const _UpcomingCard({required this.item});
 
@@ -529,7 +475,9 @@ class _DateBlock extends StatelessWidget {
 }
 
 class _EmptyDay extends StatelessWidget {
-  const _EmptyDay();
+  const _EmptyDay({this.message = 'Nenhum compromisso neste dia.'});
+
+  final String message;
 
   @override
   Widget build(BuildContext context) {
@@ -542,9 +490,47 @@ class _EmptyDay extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
       ),
-      child: Text(
-        'Nenhum compromisso neste dia.',
-        style: Theme.of(context).textTheme.bodyMedium,
+      child: Text(message, style: Theme.of(context).textTheme.bodyMedium),
+    );
+  }
+}
+
+class _MeetingCard extends StatelessWidget {
+  const _MeetingCard({required this.meeting});
+
+  final MeetingProgram meeting;
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = <String>[
+      for (final section in meeting.sections)
+        for (final part in section.parts)
+          if (part.title.isNotEmpty)
+            part.roles.where((role) => role.personName.trim().isNotEmpty).isEmpty
+                ? part.title
+                : '${part.title}: ${part.roles.map((role) => role.personName.trim()).where((name) => name.isNotEmpty).join(', ')}',
+      for (final duty in meeting.duties)
+        if (duty.people.isNotEmpty) '${duty.label}: ${duty.people.join(', ')}',
+    ];
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(meeting.time, style: Theme.of(context).textTheme.bodySmall),
+          Text(meeting.title, style: Theme.of(context).textTheme.titleMedium),
+          for (final line in lines)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(line, style: Theme.of(context).textTheme.bodyMedium),
+            ),
+        ],
       ),
     );
   }

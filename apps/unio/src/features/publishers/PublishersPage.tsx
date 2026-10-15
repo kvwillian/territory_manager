@@ -5,7 +5,6 @@ import { BarChart3, Download, LayoutList, Plus, Search, Users } from 'lucide-rea
 import {
   assignmentPrivileges,
   groupTones,
-  mockGroups,
   type AssignmentDuty,
   type MockGroup,
   type MockPioneer,
@@ -28,7 +27,7 @@ export function PublishersPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const tab = tabFromPath(location.pathname)
-  const { publishers, addPublisher, updatePublisher } = usePublisherCatalog()
+  const { publishers, groups, error, addPublisher, updatePublisher } = usePublisherCatalog()
   const [name, setName] = useState('')
   const [groupId, setGroupId] = useState('')
   const [status, setStatus] = useState('')
@@ -49,8 +48,11 @@ export function PublishersPage() {
       if (gender && publisher.gender !== gender) return false
       if (privilege === 'auxiliary' && publisher.pioneer !== 'auxiliary') return false
       if (privilege === 'regular' && publisher.pioneer !== 'regular') return false
+      if (privilege === 'needsElderlySupport' && !publisher.needsElderlySupport) return false
+      if (privilege === 'driver' && !publisher.driver) return false
       if (assignmentPrivileges.some((item) => item.id === privilege) && !publisher.duties.includes(privilege as AssignmentDuty)) return false
-      if (privilege && privilege !== 'auxiliary' && privilege !== 'regular' && !assignmentPrivileges.some((item) => item.id === privilege) && publisher.privilege !== privilege) return false
+      const careFilter = privilege === 'needsElderlySupport' || privilege === 'driver'
+      if (privilege && !careFilter && privilege !== 'auxiliary' && privilege !== 'regular' && !assignmentPrivileges.some((item) => item.id === privilege) && publisher.privilege !== privilege) return false
       return true
     })
   }, [publishers, name, groupId, status, gender, privilege])
@@ -68,14 +70,16 @@ export function PublishersPage() {
   }
 
   function exportList() {
-    const header = ['Nome', 'Idade', 'Gênero', 'Grupo', 'Status', 'Privilégio', 'Telefone']
+    const header = ['Nome', 'Idade', 'Gênero', 'Grupo', 'Status', 'Privilégio', 'Apoio a idosos', 'Motorista', 'Telefone']
     const lines = filtered.map((publisher) => [
       publisher.name,
       String(publisher.age),
       publisher.gender === 'feminino' ? 'Feminino' : 'Masculino',
-      mockGroups.find((group) => group.id === publisher.groupId)?.name ?? 'Sem grupo',
+      groups.find((group) => group.id === publisher.groupId)?.name ?? 'Sem grupo',
       publisher.status === 'active' ? 'Ativo' : 'Inativo',
       privilegeLabel(publisher),
+      publisher.needsElderlySupport ? 'Sim' : 'Não',
+      publisher.driver ? 'Sim' : 'Não',
       publisher.phone,
     ])
     const csv = [header, ...lines].map((row) => row.map((cell) => `"${cell}"`).join(',')).join('\n')
@@ -96,7 +100,6 @@ export function PublishersPage() {
           <div>
             <h1 className="text-[28px] font-semibold tracking-tight">Publicadores</h1>
             <p className="mt-1 text-sm text-muted">Gerencie os publicadores da congregação, seus grupos e informações.</p>
-            <p className="mt-1 text-xs text-muted">Lista de exemplo, até os dados reais serem carregados.</p>
           </div>
         </div>
         <button type="button" onClick={() => setAdding(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-indigo px-4 text-sm font-medium text-white">
@@ -105,6 +108,7 @@ export function PublishersPage() {
         </button>
       </div>
 
+      {error ? <p className="mt-4 rounded-xl bg-[#FDE8EF] px-3 py-2 text-sm text-[#9F1239]">{error}</p> : null}
       <div className="mt-5 flex gap-1 border-b border-line">
         <TabLink active={tab === 'lista'} onClick={() => navigate('/publicadores')} icon={<LayoutList size={16} />} label="Lista" />
         <TabLink active={tab === 'grupos'} onClick={() => navigate('/publicadores/grupos')} icon={<Users size={16} />} label="Grupos" />
@@ -127,7 +131,7 @@ export function PublishersPage() {
             <Filter value={groupId} label="Todos os grupos" onChange={(value) => { setGroupId(value); setPage(1) }}>
               <option value="">Todos os grupos</option>
               <option value="none">Sem grupo</option>
-              {mockGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+              {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
             </Filter>
             <Filter value={status} label="Todos os status" onChange={(value) => { setStatus(value); setPage(1) }}>
               <option value="">Todos os status</option>
@@ -147,6 +151,8 @@ export function PublishersPage() {
               <option value="auxiliary">Pioneiro auxiliar</option>
               <option value="regular">Pioneiro regular</option>
               {assignmentPrivileges.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+              <option value="needsElderlySupport">Precisa de apoio</option>
+              <option value="driver">Motorista</option>
             </Filter>
             <button
               type="button"
@@ -171,7 +177,7 @@ export function PublishersPage() {
                       {section.title}
                       <span className="ml-2 font-medium normal-case tracking-normal">{people.length}</span>
                     </h2>
-                    <PublisherTable publishers={people} onEdit={setEditing} />
+                    <PublisherTable publishers={people} groups={groups} onEdit={setEditing} />
                   </section>
                 )
               })}
@@ -184,7 +190,7 @@ export function PublishersPage() {
                       {section.label}
                       <span className="ml-2 font-medium normal-case tracking-normal">{people.length}</span>
                     </h2>
-                    <PublisherTable publishers={people} onEdit={setEditing} />
+                    <PublisherTable publishers={people} groups={groups} onEdit={setEditing} />
                   </section>
                 )
               })}
@@ -192,7 +198,7 @@ export function PublishersPage() {
             </div>
           ) : (
             <>
-              <PublisherTable publishers={slice} onEdit={setEditing} />
+              <PublisherTable publishers={slice} groups={groups} onEdit={setEditing} />
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3 text-sm text-muted">
                 <span>{from}-{to} de {filtered.length} publicadores</span>
                 <div className="flex items-center gap-1">
@@ -211,9 +217,9 @@ export function PublishersPage() {
       {tab === 'grupos' ? (
         <section className="mt-4">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {mockGroups.map((group) => {
+            {groups.map((group) => {
               const members = publishers.filter((publisher) => publisher.groupId === group.id)
-              const superintendent = members.find((publisher) => publisher.privilege === 'elder') ?? members[0]
+              const superintendent = publishers.find((publisher) => publisher.id === group.superintendentPublisherId)
               const tone = groupTones[group.tone]
               const shown = members.slice(0, 4)
               return (
@@ -251,13 +257,13 @@ export function PublishersPage() {
       ) : null}
 
       {tab === 'estatisticas' ? <Statistics publishers={publishers} /> : null}
-      {adding ? <AddPublisher onClose={() => setAdding(false)} onAdd={(publisher) => { addPublisher(publisher); setAdding(false); setPage(1) }} /> : null}
+      {adding ? <AddPublisher onClose={() => setAdding(false)} onAdd={async (publisher) => { await addPublisher(publisher); setAdding(false); setPage(1) }} /> : null}
       {editing ? (
         <EditPrivileges
           publisher={editing}
           onClose={() => setEditing(null)}
-          onSave={(privilege, pioneer, duties) => {
-            updatePublisher(editing.id, { privilege, pioneer, duties })
+          onSave={async (privilege, pioneer, duties, needsElderlySupport, driver) => {
+            await updatePublisher(editing.id, { privilege, pioneer, duties, needsElderlySupport, driver })
             setEditing(null)
           }}
         />
@@ -266,7 +272,7 @@ export function PublishersPage() {
   )
 }
 
-function PublisherTable({ publishers, onEdit }: { publishers: MockPublisher[]; onEdit: (publisher: MockPublisher) => void }) {
+function PublisherTable({ publishers, groups, onEdit }: { publishers: MockPublisher[]; groups: MockGroup[]; onEdit: (publisher: MockPublisher) => void }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[980px] text-left text-sm">
@@ -277,6 +283,7 @@ function PublisherTable({ publishers, onEdit }: { publishers: MockPublisher[]; o
             <th className="px-3 py-3">Gênero</th>
             <th className="px-3 py-3">Status</th>
             <th className="px-3 py-3">Privilégios</th>
+            <th className="px-3 py-3">Idosos</th>
             <th className="px-3 py-3">Telefone</th>
             <th className="px-3 py-3">Ações</th>
           </tr>
@@ -284,10 +291,10 @@ function PublisherTable({ publishers, onEdit }: { publishers: MockPublisher[]; o
         <tbody>
           {publishers.length === 0 ? (
             <tr className="border-t border-line">
-              <td colSpan={7} className="px-4 py-8 text-muted">Nenhum publicador encontrado.</td>
+              <td colSpan={8} className="px-4 py-8 text-muted">Nenhum publicador encontrado.</td>
             </tr>
           ) : publishers.map((publisher) => {
-            const group = mockGroups.find((item) => item.id === publisher.groupId)
+            const group = groups.find((item) => item.id === publisher.groupId)
             return (
               <tr key={publisher.id} className="border-t border-line">
                 <td className="px-4 py-3">
@@ -295,7 +302,7 @@ function PublisherTable({ publishers, onEdit }: { publishers: MockPublisher[]; o
                     <Avatar name={publisher.name} />
                     <span>
                       <span className="block font-medium">{publisher.name}</span>
-                      <span className="text-xs text-muted">{publisher.age} anos</span>
+                      <span className="text-xs text-muted">{publisher.age > 0 ? `${publisher.age} anos` : 'Idade não informada'}</span>
                     </span>
                   </span>
                 </td>
@@ -318,6 +325,13 @@ function PublisherTable({ publishers, onEdit }: { publishers: MockPublisher[]; o
                     </span>
                   ) : null}
                 </td>
+                <td className="px-3 py-3">
+                  <span className="flex flex-wrap gap-1">
+                    {publisher.needsElderlySupport ? <CareFlag label="Apoio" /> : null}
+                    {publisher.driver ? <CareFlag label="Motorista" /> : null}
+                    {!publisher.needsElderlySupport && !publisher.driver ? <span className="text-muted">—</span> : null}
+                  </span>
+                </td>
                 <td className="px-3 py-3 text-muted">{publisher.phone}</td>
                 <td className="px-3 py-3">
                   <button type="button" onClick={() => onEdit(publisher)} className="text-sm font-medium text-indigo">Editar</button>
@@ -338,11 +352,13 @@ function EditPrivileges({
 }: {
   publisher: MockPublisher
   onClose: () => void
-  onSave: (privilege: MockPrivilege, pioneer: MockPioneer, duties: AssignmentDuty[]) => void
+  onSave: (privilege: MockPrivilege, pioneer: MockPioneer, duties: AssignmentDuty[], needsElderlySupport: boolean, driver: boolean) => void
 }) {
   const [privilege, setPrivilege] = useState(publisher.privilege)
   const [pioneer, setPioneer] = useState(publisher.pioneer)
   const [duties, setDuties] = useState<AssignmentDuty[]>(publisher.duties)
+  const [needsElderlySupport, setNeedsElderlySupport] = useState(publisher.needsElderlySupport)
+  const [driver, setDriver] = useState(publisher.driver)
   function toggle(duty: AssignmentDuty) {
     setDuties((current) => current.includes(duty) ? current.filter((item) => item !== duty) : [...current, duty])
   }
@@ -353,7 +369,7 @@ function EditPrivileges({
         onClick={(event) => event.stopPropagation()}
         onSubmit={(event) => {
           event.preventDefault()
-          onSave(privilege, pioneer, duties)
+          onSave(privilege, pioneer, duties, needsElderlySupport, driver)
         }}
       >
         <h2 className="text-lg font-semibold">Privilégios</h2>
@@ -383,6 +399,19 @@ function EditPrivileges({
             ))}
           </div>
         </fieldset>
+        <fieldset className="mt-4">
+          <legend className="text-xs text-muted">Suporte a idosos</legend>
+          <div className="mt-2 grid gap-2">
+            <label className="flex items-center gap-2 rounded-lg border border-line px-2 py-2 text-sm text-ink">
+              <input type="checkbox" checked={needsElderlySupport} onChange={() => setNeedsElderlySupport((current) => !current)} />
+              Precisa de apoio
+            </label>
+            <label className="flex items-center gap-2 rounded-lg border border-line px-2 py-2 text-sm text-ink">
+              <input type="checkbox" checked={driver} onChange={() => setDriver((current) => !current)} />
+              Motorista
+            </label>
+          </div>
+        </fieldset>
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onClose} className="h-10 rounded-xl border border-line px-3 text-sm">Cancelar</button>
           <button type="submit" className="h-10 rounded-xl bg-indigo px-4 text-sm font-medium text-white">Salvar</button>
@@ -393,6 +422,7 @@ function EditPrivileges({
 }
 
 function Statistics({ publishers }: { publishers: MockPublisher[] }) {
+  const { groups } = usePublisherCatalog()
   const active = publishers.filter((publisher) => publisher.status === 'active').length
   const women = publishers.filter((publisher) => publisher.gender === 'feminino').length
   const unassigned = publishers.filter((publisher) => !publisher.groupId).length
@@ -403,7 +433,9 @@ function Statistics({ publishers }: { publishers: MockPublisher[] }) {
       <Stat label="Sem grupo" value={String(unassigned)} />
       <Stat label="Irmãs" value={String(women)} />
       <Stat label="Irmãos" value={String(publishers.length - women)} />
-      <Stat label="Grupos" value={String(mockGroups.length)} />
+      <Stat label="Grupos" value={String(groups.length)} />
+      <Stat label="Precisam de apoio" value={String(publishers.filter((publisher) => publisher.needsElderlySupport).length)} />
+      <Stat label="Motoristas" value={String(publishers.filter((publisher) => publisher.driver).length)} />
     </section>
   )
 }
@@ -434,6 +466,10 @@ function Filter({ value, label, onChange, children }: { value: string; label: st
   )
 }
 
+function CareFlag({ label }: { label: string }) {
+  return <span className="rounded-full bg-[#FEF3E2] px-2 py-0.5 text-[11px] font-medium text-[#92400E]">{label}</span>
+}
+
 function GroupChip({ group }: { group: MockGroup }) {
   const tone = groupTones[group.tone]
   return (
@@ -461,8 +497,10 @@ function AddPublisher({ onClose, onAdd }: { onClose: () => void; onAdd: (publish
     privilege: 'publisher',
     pioneer: 'none',
     duties: [],
+    needsElderlySupport: false,
+    driver: false,
     phone: '',
-    groupId: 'grupo-1',
+    groupId: null,
   })
   return (
     <div className="fixed inset-0 z-30 grid place-items-center bg-[#0B0E14]/40 p-4" onClick={onClose}>

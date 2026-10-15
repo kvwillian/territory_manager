@@ -40,6 +40,10 @@ function publisherFromDoc(id: string, data: FirebaseFirestore.DocumentData): Pub
     indicador: data.indicador === true,
     microfone: data.microfone === true,
     som: data.som === true,
+    estudante: data.estudante === true,
+    volante: data.volante === true,
+    needsElderlySupport: data.needsElderlySupport === true,
+    driver: data.driver === true,
     createdAt: iso(data.createdAt),
     updatedAt: iso(data.updatedAt),
   }
@@ -47,6 +51,8 @@ function publisherFromDoc(id: string, data: FirebaseFirestore.DocumentData): Pub
   if (typeof data.email === "string") publisher.email = data.email
   if (typeof data.groupId === "string") publisher.groupId = data.groupId
   if (typeof data.userId === "string") publisher.userId = data.userId
+  if (data.gender === "feminino" || data.gender === "masculino") publisher.gender = data.gender
+  if (typeof data.age === "number") publisher.age = data.age
   return publisher
 }
 
