@@ -64,7 +64,6 @@ export function ElderlySupportPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [exportOpen, setExportOpen] = useState(false)
-  const [newDate, setNewDate] = useState('')
   const [hiddenDates, setHiddenDates] = useState<string[]>([])
   const keyRef = useRef(1)
   const exportMenu = useRef<HTMLDivElement>(null)
@@ -110,7 +109,7 @@ export function ElderlySupportPage() {
 
   const meetingDates = meetingDatesInMonth(meetings, monthKey).filter((date) => !hiddenDates.includes(date))
   const monthRows = ensureMeetingRows(
-    rows.filter((row) => inMonth(row.date, monthKey) && !hiddenDates.includes(row.date)),
+    rows.filter((row) => meetingDates.includes(row.date)),
     meetingDates,
   )
   const namedRows = monthRows.filter((row) => row.elderlyName.trim())
@@ -119,7 +118,6 @@ export function ElderlySupportPage() {
 
   function startEdit() {
     setSnapshot({ rows, note })
-    setNewDate(defaultDate(monthKey))
     setEditing(true)
     setError('')
     setNotice('')
@@ -409,9 +407,7 @@ export function ElderlySupportPage() {
             <p className="border-t border-line px-6 py-8 text-sm text-muted">
               {query.trim()
                 ? 'Nenhuma designação encontrada.'
-                : editing
-                  ? 'Nenhuma designação neste mês. Adicione uma reunião abaixo.'
-                  : 'Nenhuma designação neste mês. Use Editar escala para montar a lista.'}
+                : 'Nenhuma reunião neste mês.'}
             </p>
           ) : (
             groups.map((group) => (
@@ -502,26 +498,6 @@ export function ElderlySupportPage() {
               </div>
             ))
           )}
-          {editing ? (
-            <form
-              className="flex items-center gap-2 border-t border-line px-4 py-3"
-              onSubmit={(event) => {
-                event.preventDefault()
-                addRow(newDate)
-              }}
-            >
-              <input
-                type="date"
-                value={newDate}
-                aria-label="Data da nova reunião"
-                onChange={(event) => setNewDate(event.target.value)}
-                className="h-10 rounded-xl border border-line px-3 text-sm"
-              />
-              <button type="submit" className="h-10 rounded-xl border border-line bg-white px-3 text-sm font-medium">
-                Adicionar reunião
-              </button>
-            </form>
-          ) : null}
         </div>
       </div>
     </div>
@@ -631,12 +607,4 @@ function useDismiss(open: boolean, root: RefObject<HTMLElement | null>, close: (
 function currentMonthKey() {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-
-function defaultDate(monthKey: string) {
-  if (monthKey === currentMonthKey()) {
-    const now = new Date()
-    return `${monthKey}-${String(now.getDate()).padStart(2, '0')}`
-  }
-  return `${monthKey}-01`
 }

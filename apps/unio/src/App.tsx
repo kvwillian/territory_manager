@@ -5,6 +5,19 @@ import { AudioVideoPage } from './features/audio-video/AudioVideoPage'
 import { CleaningPage } from './features/cleaning/CleaningPage'
 import { ElderlySupportPage } from './features/elderly-support/ElderlySupportPage'
 import { MeetingsPage } from './features/meetings/MeetingsPage'
+import { useMeetings } from './store'
+import { PublishersPage } from './features/publishers/PublishersPage'
+
+function SettingsPage() {
+  const { congregation } = useMeetings()
+  const where = [congregation.name, congregation.place].filter(Boolean).join(', ')
+  return (
+    <PlaceholderPage
+      title="Configurações"
+      body={`${where}. O administrador concede o acesso de cada módulo.`}
+    />
+  )
+}
 
 export function App() {
   return (
@@ -33,15 +46,9 @@ export function App() {
         <Route path="designacoes/audio-video" element={<AudioVideoPage />} />
         <Route path="designacoes/idosos" element={<ElderlySupportPage />} />
         <Route path="designacoes/limpeza" element={<CleaningPage />} />
-        <Route
-          path="publicadores"
-          element={
-            <PlaceholderPage
-              title="Publicadores"
-              body="O cadastro continua no aplicativo. As designações usam esses nomes quando o Firestore estiver ligado."
-            />
-          }
-        />
+        <Route path="publicadores" element={<PublishersPage />} />
+        <Route path="publicadores/grupos" element={<PublishersPage />} />
+        <Route path="publicadores/estatisticas" element={<PublishersPage />} />
         <Route
           path="territorios"
           element={
@@ -60,10 +67,7 @@ export function App() {
         <Route
           path="configuracoes"
           element={
-            <PlaceholderPage
-              title="Configurações"
-              body="Congregação Central, São Paulo. O administrador concede o acesso de cada módulo."
-            />
+            <SettingsPage />
           }
         />
       </Route>

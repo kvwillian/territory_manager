@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2 } from 'lucide-react'
 import type { RosterField } from './roster'
-import { qualifiesFor, type CongregationPublisher } from './publishers'
+import { qualifiesFor } from './publishers'
+import type { MockPublisher } from '../publishers/mock'
 
 const emptyQualified: Record<RosterField, string> = {
   attendants: 'Ninguém com o privilégio de indicador.',
-  microphones: 'Ninguém com o privilégio de microfone ou som.',
-  sound: 'Ninguém com o privilégio de som.',
+  microphones: 'Ninguém com o privilégio de microfone, volante ou áudio.',
+  sound: 'Ninguém com o privilégio de áudio.',
 }
 
 export function AssigneeField({
@@ -21,7 +22,7 @@ export function AssigneeField({
 }: {
   value: string
   field: RosterField
-  publishers: CongregationPublisher[]
+  publishers: MockPublisher[]
   publisherStatus: 'loading' | 'ready' | 'error'
   dark: boolean
   label: string

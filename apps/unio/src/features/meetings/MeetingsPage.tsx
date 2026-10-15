@@ -24,6 +24,8 @@ import {
   monthTitle,
   shiftMonth,
   statusLabel,
+  weekdayLong,
+  weekdayShort,
   weekRangeLabel,
   type MeetingDuty,
   type MeetingSection,
@@ -33,6 +35,9 @@ import {
 } from '../../domain'
 import { useMeetings } from '../../store'
 import { useAccount } from '../../auth'
+import { usePublisherCatalog } from '../publishers/catalog'
+import { assignmentEmptyMessage, candidatesForMeetingLabel } from '../publishers/assignments'
+import { PublisherSelect } from '../publishers/PublisherSelect'
 import { ImportFlow } from './ImportFlow'
 
 const sectionMeta: Record<
@@ -174,7 +179,7 @@ export function MeetingsPage() {
               <span className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${statusClass[item.status]}`}>
                 {statusLabel[item.status]}
               </span>
-              <span className="mt-3 block text-xs text-muted">{dayLine(item.isoDate, meta.dayShort)}</span>
+              <span className="mt-3 block text-xs text-muted">{dayLine(item.isoDate, weekdayShort(item.isoDate))}</span>
             </button>
           )
         })}
@@ -196,7 +201,7 @@ export function MeetingsPage() {
             <header className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-lg font-semibold">{headingDate(meeting.isoDate, meta.dayLong)}</h2>
+                  <h2 className="text-lg font-semibold">{headingDate(meeting.isoDate, weekdayLong(meeting.isoDate))}</h2>
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusClass[meeting.status]}`}>
                     {statusLabel[meeting.status]}
                   </span>
@@ -377,6 +382,7 @@ function sectionOrder(token: SectionToken) {
 
 function PartRow({ sectionId, part, number }: { sectionId: string; part: ProgramPart; number: number }) {
   const store = useMeetings()
+  const { publishers } = usePublisherCatalog()
   const [open, setOpen] = useState(false)
   const canRemove = !part.structural && !part.pinned
   const names = part.roles.map((itemRole) => itemRole.personName.trim()).filter(Boolean)
@@ -401,13 +407,14 @@ function PartRow({ sectionId, part, number }: { sectionId: string; part: Program
         {store.editing ? (
           <div className="space-y-1">
             {part.roles.map((itemRole) => (
-              <input
+              <PublisherSelect
                 key={itemRole.id}
                 value={itemRole.personName}
-                onChange={(event) => store.updatePartPerson(sectionId, part.id, itemRole.id, event.target.value)}
-                placeholder={itemRole.showLabel ? itemRole.label : 'Nome do publicador'}
-                aria-label={`${itemRole.label} da parte ${number}`}
-                className="h-8 w-full rounded-lg border border-line px-2 text-sm outline-none focus:border-indigo"
+                publishers={candidatesForMeetingLabel(publishers, itemRole.label)}
+                emptyMessage={assignmentEmptyMessage(itemRole.label)}
+                placeholder={itemRole.showLabel ? itemRole.label : 'Publicador'}
+                label={`${itemRole.label} da parte ${number}`}
+                onCommit={(name) => store.updatePartPerson(sectionId, part.id, itemRole.id, name)}
               />
             ))}
           </div>
@@ -482,6 +489,7 @@ function PartRow({ sectionId, part, number }: { sectionId: string; part: Program
 
 function DutyCard({ duties }: { duties: MeetingDuty[] }) {
   const store = useMeetings()
+  const { publishers } = usePublisherCatalog()
   const query = store.query.trim()
   const visible = duties.filter((duty) => {
     if (!query) return true
@@ -506,13 +514,14 @@ function DutyCard({ duties }: { duties: MeetingDuty[] }) {
                 {store.editing ? (
                   <div className="mt-1 space-y-1">
                     {duty.people.map((person, index) => (
-                      <input
+                      <PublisherSelect
                         key={`${duty.id}-${index}`}
                         value={person}
-                        onChange={(event) => store.updateDutyPerson(duty.id, index, event.target.value)}
-                        placeholder="Nome do publicador"
-                        className="h-8 w-full rounded-lg border border-line px-2 text-sm outline-none focus:border-indigo"
-                        aria-label={`${duty.label} ${index + 1}`}
+                        publishers={candidatesForMeetingLabel(publishers, duty.label)}
+                        emptyMessage={assignmentEmptyMessage(duty.label)}
+                        placeholder="Publicador"
+                        label={`${duty.label} ${index + 1}`}
+                        onCommit={(name) => store.updateDutyPerson(duty.id, index, name)}
                       />
                     ))}
                   </div>

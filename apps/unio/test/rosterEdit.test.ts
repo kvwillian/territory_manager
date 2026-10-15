@@ -3,6 +3,8 @@ import { test } from 'node:test'
 import { addRosterDay, assignSlot, emptyRoster, removeRosterDay, rosterRowsForMeetings } from '../src/features/audio-video/roster.ts'
 import { ensureMeetingRows } from '../src/features/elderly-support/model.ts'
 import { qualifiesFor } from '../src/features/audio-video/publishers.ts'
+import { candidatesForMeetingLabel } from '../src/features/publishers/assignments.ts'
+import { mockPublishers } from '../src/features/publishers/mock.ts'
 
 test('assigns a publisher into one cell slot', () => {
   const roster = addRosterDay(emptyRoster(2026, 10), 15)
@@ -34,6 +36,25 @@ test('maps audio and video privileges to the three columns', () => {
   assert.equal(qualifiesFor(both, 'microphones'), true)
   assert.equal(qualifiesFor(both, 'sound'), true)
 })
+test('uses publisher duties for audio, video, and meeting assignments', () => {
+  const estudante = { duties: ['estudante'], status: 'active' }
+  const volante = { duties: ['volante'], status: 'active' }
+  const audio = { duties: ['audio'], status: 'active' }
+  const away = { duties: ['indicador'], status: 'inactive' }
+  assert.equal(qualifiesFor(estudante, 'attendants'), false)
+  assert.equal(qualifiesFor(volante, 'microphones'), true)
+  assert.equal(qualifiesFor(volante, 'sound'), false)
+  assert.equal(qualifiesFor(audio, 'microphones'), true)
+  assert.equal(qualifiesFor(audio, 'sound'), true)
+  assert.equal(qualifiesFor(away, 'attendants'), false)
+  assert.deepEqual(
+    candidatesForMeetingLabel(mockPublishers, 'Estudante').map((publisher) => publisher.name),
+    ['Ana Clara Santos', 'Rafael Teixeira', 'Bianca Martins', 'Larissa Alves', 'Natália Borges'],
+  )
+  assert.ok(candidatesForMeetingLabel(mockPublishers, 'Presidente').every((publisher) => publisher.privilege !== 'publisher'))
+  assert.equal(candidatesForMeetingLabel(mockPublishers, 'Indicadores').some((publisher) => publisher.name === 'Daniela Lima'), false)
+})
+
 test('uses registered meeting dates and keeps an excluded day hidden', () => {
   const roster = emptyRoster(2026, 12)
   const shown = rosterRowsForMeetings(roster, ['2026-12-02', '2026-12-06', '2026-12-27'])

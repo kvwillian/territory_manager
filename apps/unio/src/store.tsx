@@ -1,14 +1,19 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { collection, getDocs, query as queryDocuments, where } from 'firebase/firestore'
-import { db } from './firebase'
+import { collection, doc, getDoc, getDocs, query as queryDocuments, where } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
+import { db, functions } from './firebase'
 import { meetingFromDocument, mergeMeetings } from './features/meetings/storedMeetings'
 import {
   addDays,
   blankFrom,
+  congregationProfile,
+  congregationSchedule,
+  type CongregationProfile,
   isCurrentWeek,
   meetingInStrip,
   monthKey,
   seedMeetings,
+  withWeekendMeetings,
   type CongregationMeeting,
   type MeetingKind,
   type MeetingStatus,
@@ -22,6 +27,7 @@ type MeetingsContextValue = {
   editing: boolean
   sidebarCollapsed: boolean
   meetings: CongregationMeeting[]
+  congregation: CongregationProfile
   visible: CongregationMeeting[]
   selected: CongregationMeeting | undefined
   closedSections: string[]
@@ -57,6 +63,7 @@ function patchSelected(
 
 export function MeetingsProvider({ congregationId, children }: { congregationId: string | null; children: ReactNode }) {
   const [meetings, setMeetings] = useState(seedMeetings)
+  const [congregation, setCongregation] = useState<CongregationProfile>({ name: 'Congregação', place: '' })
   const [kind, setKindState] = useState<MeetingKind>('midweek')
   const [month, setMonthState] = useState('2026-10')
   const [selectedId, setSelectedId] = useState('midweek-2026-10-14')
@@ -68,15 +75,20 @@ export function MeetingsProvider({ congregationId, children }: { congregationId:
   useEffect(() => {
     if (!congregationId) return
     let active = true
-    getDocs(queryDocuments(collection(db, 'meetingPrograms'), where('congregationId', '==', congregationId)))
-      .then((snapshot) => {
+    Promise.all([
+      getDoc(doc(db, 'congregations', congregationId)),
+      getDocs(queryDocuments(collection(db, 'meetingPrograms'), where('congregationId', '==', congregationId))),
+    ])
+      .then(([congregation, snapshot]) => {
         if (!active) return
+        const record = congregation.data() as Record<string, unknown> | undefined
+        const schedule = congregationSchedule(record)
+        setCongregation(congregationProfile(record))
         const loaded = snapshot.docs
           .map((item) => meetingFromDocument(item.id, item.data() as Record<string, unknown>))
           .filter((meeting): meeting is NonNullable<typeof meeting> => meeting !== null)
-        if (loaded.length === 0) return
         setMeetings((current) => {
-          const merged = mergeMeetings(current, loaded)
+          const merged = withWeekendMeetings(mergeMeetings(current, loaded), schedule)
           setSelectedId((selected) => {
             if (merged.some((meeting) => meeting.id === selected)) return selected
             const previous = current.find((meeting) => meeting.id === selected)
@@ -87,8 +99,10 @@ export function MeetingsProvider({ congregationId, children }: { congregationId:
           })
           return merged
         })
+        if (loaded.length === 0) return
         const months = [...new Set(loaded.map((meeting) => meeting.isoDate.slice(0, 7)))].sort()
         setMonthState((current) => (months.includes(current) ? current : months[0] ?? current))
+        void httpsCallable(functions, 'ensureWeekendMeetings')({}).catch(() => undefined)
       })
       .catch(() => {})
     return () => {
@@ -294,6 +308,7 @@ export function MeetingsProvider({ congregationId, children }: { congregationId:
     editing,
     sidebarCollapsed,
     meetings,
+    congregation,
     visible,
     selected,
     closedSections,

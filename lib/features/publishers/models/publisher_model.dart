@@ -38,6 +38,11 @@ class PublisherModel {
     this.microfone = false,
     this.som = false,
     this.congregationId,
+    this.phone,
+    this.email,
+    this.groupId,
+    this.userId,
+    this.status = 'active',
   });
 
   final String id;
@@ -48,6 +53,11 @@ class PublisherModel {
   final bool microfone;
   final bool som;
   final String? congregationId;
+  final String? phone;
+  final String? email;
+  final String? groupId;
+  final String? userId;
+  final String status;
 
   String get subtitle {
     if (pioneer == PioneerService.none) return privilegeLabels[privilege]!;
@@ -63,6 +73,11 @@ class PublisherModel {
     bool? microfone,
     bool? som,
     String? congregationId,
+    String? phone,
+    String? email,
+    String? groupId,
+    String? userId,
+    String? status,
   }) {
     return PublisherModel(
       id: id ?? this.id,
@@ -73,6 +88,11 @@ class PublisherModel {
       microfone: microfone ?? this.microfone,
       som: som ?? this.som,
       congregationId: congregationId ?? this.congregationId,
+      phone: phone ?? this.phone,
+      email: email ?? this.email,
+      groupId: groupId ?? this.groupId,
+      userId: userId ?? this.userId,
+      status: status ?? this.status,
     );
   }
 }

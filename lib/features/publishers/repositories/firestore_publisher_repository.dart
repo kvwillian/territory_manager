@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import '../../../core/constants/congregation_constants.dart';
 import '../models/publisher_model.dart';
@@ -38,42 +39,53 @@ class FirestorePublisherRepository implements PublisherRepository {
 
   @override
   Future<PublisherModel> createPublisher(PublisherModel publisher) async {
-    final docRef = _firestore.collection(_collection).doc();
-    await docRef.set({
+    final result = await FirebaseFunctions.instance.httpsCallable('createPublisherAccount').call({
       'name': publisher.name,
       'privilege': publisher.privilege.name,
       'pioneer': publisher.pioneer.name,
       'indicador': publisher.indicador,
       'microfone': publisher.microfone,
       'som': publisher.som,
-      'congregationId': _cid,
+      if (publisher.phone != null) 'phone': publisher.phone,
+      if (publisher.email != null) 'email': publisher.email,
+      if (publisher.groupId != null) 'groupId': publisher.groupId,
+      if (publisher.userId != null) 'userId': publisher.userId,
+      'status': publisher.status,
     });
-    return publisher.copyWith(id: docRef.id, congregationId: _cid);
+    final data = Map<String, dynamic>.from(result.data as Map);
+    return _fromMap(data['id'] as String? ?? '', data);
   }
 
   @override
   Future<PublisherModel> updatePublisher(PublisherModel publisher) async {
-    await _firestore.collection(_collection).doc(publisher.id).update({
+    final result = await FirebaseFunctions.instance.httpsCallable('updatePublisherAccount').call({
+      'publisherId': publisher.id,
       'name': publisher.name,
       'privilege': publisher.privilege.name,
       'pioneer': publisher.pioneer.name,
       'indicador': publisher.indicador,
       'microfone': publisher.microfone,
       'som': publisher.som,
-      'congregationId': _cid,
+      'phone': publisher.phone,
+      'email': publisher.email,
+      'status': publisher.status,
     });
-    return publisher.copyWith(congregationId: _cid);
+    final data = Map<String, dynamic>.from(result.data as Map);
+    return _fromMap(publisher.id, data);
   }
 
   @override
   Future<void> deletePublisher(String id) async {
-    await _firestore.collection(_collection).doc(id).delete();
+    await FirebaseFunctions.instance.httpsCallable('deletePublisherAccount').call({'publisherId': id});
   }
 
   PublisherModel _fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data()!;
+    return _fromMap(doc.id, doc.data() ?? {});
+  }
+
+  PublisherModel _fromMap(String id, Map<String, dynamic> data) {
     return PublisherModel(
-      id: doc.id,
+      id: id,
       name: data['name'] as String? ?? '',
       privilege: privilegeFromName(data['privilege']),
       pioneer: pioneerFromName(data['pioneer']),
@@ -81,6 +93,11 @@ class FirestorePublisherRepository implements PublisherRepository {
       microfone: data['microfone'] == true,
       som: data['som'] == true,
       congregationId: data['congregationId'] as String? ?? _cid,
+      phone: data['phone'] as String?,
+      email: data['email'] as String?,
+      groupId: data['groupId'] as String?,
+      userId: data['userId'] as String?,
+      status: data['status'] == 'inactive' ? 'inactive' : 'active',
     );
   }
 }

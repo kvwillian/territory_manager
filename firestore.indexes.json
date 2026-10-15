@@ -58,6 +58,22 @@
       ]
     },
     {
+      "collectionGroup": "publishers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "congregationId", "order": "ASCENDING" },
+        { "fieldPath": "groupId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "publisherGroups",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "congregationId", "order": "ASCENDING" },
+        { "fieldPath": "name", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "preachingSessions",
       "queryScope": "COLLECTION",
       "fields": [

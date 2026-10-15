@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ThemeToggle } from '../../theme'
 import { FirebaseError } from 'firebase/app'
 import { signInWithEmailAndPassword, updatePassword } from 'firebase/auth'
 import { httpsCallable } from 'firebase/functions'
@@ -78,12 +79,11 @@ function SignIn() {
   }
 
   return (
-    <main className="grid min-h-full place-items-center bg-canvas px-4 py-10">
+    <main className="relative grid min-h-full place-items-center bg-canvas px-4 py-10">
+      <ThemeToggle className="absolute right-4 top-4" />
       <form onSubmit={(event) => void submit(event)} className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-indigo text-lg font-semibold text-white">
-            U
-          </span>
+          <img src="/logo.jpeg" alt="" className="mx-auto h-12 w-12 rounded-2xl" />
           <h1 className="mt-4 text-[28px] font-semibold tracking-tight">Unio</h1>
           <p className="mt-1 text-sm text-muted">Gestão da congregação</p>
         </div>
@@ -177,7 +177,8 @@ function ChangePassword() {
   }
 
   return (
-    <main className="grid min-h-full place-items-center bg-canvas px-4 py-10">
+    <main className="relative grid min-h-full place-items-center bg-canvas px-4 py-10">
+      <ThemeToggle className="absolute right-4 top-4" />
       <form onSubmit={(event) => void submit(event)} className="w-full max-w-md rounded-2xl border border-line bg-white p-6">
         <h1 className="text-xl font-semibold">Escolha uma senha nova</h1>
         <p className="mt-1 text-sm text-muted">A senha temporária vale só até esta troca.</p>

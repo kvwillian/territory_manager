@@ -1,7 +1,7 @@
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { db } from '../../firebase'
-import type { RosterField } from './roster'
+export { qualifiesFor } from '../publishers/assignments'
 
 export type CongregationPublisher = {
   id: string
@@ -20,12 +20,6 @@ export function publisherCaption(publisher: CongregationPublisher) {
     publisher.som ? 'Som' : '',
   ].filter(Boolean)
   return duties.join(' · ')
-}
-
-export function qualifiesFor(publisher: Pick<CongregationPublisher, 'indicador' | 'microfone' | 'som'>, field: RosterField) {
-  if (field === 'attendants') return publisher.indicador
-  if (field === 'microphones') return publisher.microfone || publisher.som
-  return publisher.som
 }
 
 export async function loadCongregationPublishers(congregationId: string) {

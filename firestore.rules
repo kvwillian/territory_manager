@@ -53,6 +53,18 @@ service cloud.firestore {
     }
 
     // Mesmo critério das reuniões: admin da congregação, ou manageFlags com elderlySupport.
+    function managesPublishers() {
+      return isAdmin()
+        || (hasProfile()
+          && profile().manageFlags is list
+          && 'publishers' in profile().manageFlags);
+    }
+
+    function supervisesPublisher(data) {
+      return profile().supervisedGroupId is string
+        && data.groupId == profile().supervisedGroupId;
+    }
+
     function managesElderlySupport() {
       return isAdmin()
         || (hasProfile()
@@ -99,7 +111,11 @@ service cloud.firestore {
             && request.resource.data.get('accessFlags', null)
                 == resource.data.get('accessFlags', null)
             && request.resource.data.get('manageFlags', null)
-                == resource.data.get('manageFlags', null))
+                == resource.data.get('manageFlags', null)
+            && request.resource.data.get('publisherId', null)
+                == resource.data.get('publisherId', null)
+            && request.resource.data.get('supervisedGroupId', null)
+                == resource.data.get('supervisedGroupId', null))
           || (isAdmin() && inCongregation(resource.data))
         );
       allow delete: if isAdmin() && inCongregation(resource.data);
@@ -176,11 +192,20 @@ service cloud.firestore {
     match /publishers/{publisherId} {
       allow read: if inCongregation(resource.data)
         && (isAdmin()
+          || managesPublishers()
+          || supervisesPublisher(resource.data)
           || (profile().accessFlags is list
             && 'publishers' in profile().accessFlags));
-      allow create: if adminCreates();
-      allow update: if adminWritesConfig();
-      allow delete: if isAdmin() && inCongregation(resource.data);
+      allow create, update, delete: if false;
+    }
+
+    match /publisherGroups/{groupId} {
+      allow read: if inCongregation(resource.data)
+        && (isAdmin()
+          || managesPublishers()
+          || (profile().accessFlags is list && 'publishers' in profile().accessFlags)
+          || profile().supervisedGroupId == groupId);
+      allow create, update, delete: if false;
     }
 
     match /meetingPrograms/{meetingId} {

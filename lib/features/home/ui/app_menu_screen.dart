@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
+import '../../auth/models/access_flags.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class AppMenuScreen extends ConsumerWidget {
@@ -16,7 +17,11 @@ class AppMenuScreen extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final user = auth.user;
-    final items = user.isAdmin ? _adminItems : _conductorItems;
+    final items = <_MenuItem>[
+      if (user.canAccess(AccessFlags.publishers))
+        const _MenuItem(Icons.people_outline, 'Publicadores', '/publishers'),
+      ...user.isAdmin ? _adminItems : _conductorItems,
+    ];
 
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.screenPadding),

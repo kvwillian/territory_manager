@@ -12,6 +12,8 @@ import 'package:territory_manager/features/home/ui/app_menu_screen.dart';
 import 'package:territory_manager/features/home/ui/congregation_dashboard_screen.dart';
 import 'package:territory_manager/features/home/ui/maps_screen.dart';
 import 'package:territory_manager/features/home/ui/module_soon_screen.dart';
+import 'package:territory_manager/features/publishers/ui/publisher_form_screen.dart';
+import 'package:territory_manager/features/publishers/ui/publishers_list_screen.dart';
 import 'package:territory_manager/features/admin/ui/assignments_screen.dart';
 import 'package:territory_manager/features/admin/ui/create_user_screen.dart';
 import 'package:territory_manager/features/admin/ui/history_screen.dart';
@@ -115,6 +117,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         }
         if ((loc == '/field' || loc.startsWith('/territory/')) &&
             !user.canAccess(AccessFlags.territories)) {
+          return '/home';
+        }
+        if (loc.startsWith('/publishers') &&
+            !user.canAccess(AccessFlags.publishers)) {
           return '/home';
         }
         if (loc == '/announcements/create' && !user.isAdmin) {
@@ -360,6 +366,31 @@ final routerProvider = Provider<GoRouter>((ref) {
                   title: 'Novo aviso',
                   child: AnnouncementFormScreen(),
                 ),
+              ),
+              GoRoute(
+                path: 'publishers',
+                builder: (context, state) => const ShellRouteConfig(
+                  title: 'Publicadores',
+                  child: PublishersListScreen(),
+                ),
+                routes: [
+                  GoRoute(
+                    path: 'create',
+                    builder: (context, state) => const ShellRouteConfig(
+                      title: 'Novo publicador',
+                      child: PublisherFormScreen(),
+                    ),
+                  ),
+                  GoRoute(
+                    path: 'edit/:id',
+                    builder: (context, state) => ShellRouteConfig(
+                      title: 'Editar publicador',
+                      child: PublisherFormScreen(
+                        publisherId: state.pathParameters['id'],
+                      ),
+                    ),
+                  ),
+                ],
               ),
               GoRoute(
                 path: 'module/:name',

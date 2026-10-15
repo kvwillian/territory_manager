@@ -25,7 +25,7 @@ const rows: AssignmentRow[] = [
 test('builds the month summary from the design', () => {
   assert.deepEqual(monthBounds('2026-10'), { from: '2026-10-01', to: '2026-10-31' })
   assert.equal(weekdayLabel('2026-10-11'), 'Domingo')
-  assert.equal(weekdayLabel('2026-10-15'), 'Quinta')
+  assert.equal(weekdayLabel('2026-10-15'), 'Quinta-feira')
   assert.equal(displayDate('2026-10-11'), '11/10/2026')
   assert.equal(initials('Solange'), 'SO')
   assert.equal(initials('M. Socorro'), 'MS')

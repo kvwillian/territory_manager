@@ -303,7 +303,96 @@ export const cancelMeetingImport = functions.https.onCall(async (data: { importI
   const path = importFilePath(manager.uid, importId)
   const fileDeleted = await removeFile(path)
   if (snapshot.exists) await ref.delete()
-  return { cancelled: true, fileDeleted }
+    return { cancelled: true, fileDeleted }
+})
+
+function weekendIso(midweekIso: string, weekendWeekday: number) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(midweekIso)) return null
+  const target = weekendWeekday === 7 ? 0 : weekendWeekday
+  if (target < 0 || target > 6) return null
+  const [year, month, day] = midweekIso.split("-").map(Number)
+  const date = new Date(year, month - 1, day)
+  const delta = (target - date.getDay() + 7) % 7
+  date.setDate(date.getDate() + delta)
+  const mm = String(date.getMonth() + 1).padStart(2, "0")
+  const dd = String(date.getDate()).padStart(2, "0")
+  return `${date.getFullYear()}-${mm}-${dd}`
+}
+
+function weekendProgram(congregationId: string, isoDate: string, time: string) {
+  const id = `weekend_${congregationId}_${isoDate}`
+  return {
+    id,
+    data: {
+      congregationId,
+      kind: "weekend",
+      isoDate,
+      time,
+      status: "draft",
+      notes: "",
+      source: "weekend-from-midweek",
+      duties: [
+        { id: `${isoDate}-attendants`, label: "Indicadores", people: ["", ""] },
+        { id: `${isoDate}-ushers`, label: "Volantes", people: ["", ""] },
+        { id: `${isoDate}-av`, label: "Áudio e Vídeo", people: ["", ""] },
+      ],
+      sections: [
+        {
+          id: `${isoDate}-program`,
+          title: "Programa",
+          token: "neutral",
+          parts: [
+            { id: `${isoDate}-open`, title: "Oração inicial", durationMinutes: 3, roles: [{ id: `${isoDate}-open-a`, label: "Oração", showLabel: false, personName: "" }] },
+            { id: `${isoDate}-chair`, title: "Presidente", durationMinutes: 5, roles: [{ id: `${isoDate}-chair-a`, label: "Presidente", showLabel: false, personName: "" }] },
+            { id: `${isoDate}-talk`, title: "Discurso público", durationMinutes: 30, roles: [{ id: `${isoDate}-talk-a`, label: "Orador", showLabel: false, personName: "" }] },
+            {
+              id: `${isoDate}-wt`,
+              title: "A Sentinela",
+              durationMinutes: 30,
+              pinned: true,
+              roles: [
+                { id: `${isoDate}-wt-a`, label: "Dirigente", showLabel: true, personName: "" },
+                { id: `${isoDate}-wt-b`, label: "Leitor", showLabel: true, personName: "" },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  }
+}
+
+async function saveMissingWeekends(congregationId: string) {
+  const congregation = await admin.firestore().collection("congregations").doc(congregationId).get()
+  const data = congregation.data() ?? {}
+  const weekendWeekday = typeof data.weekendWeekday === "number" ? data.weekendWeekday : 7
+  const weekendTime = typeof data.weekendTime === "string" ? data.weekendTime : "10:00"
+  const snapshot = await admin.firestore().collection(MEETINGS).where("congregationId", "==", congregationId).get()
+  const weekends = new Set(
+    snapshot.docs
+      .filter((item) => item.data().kind === "weekend" && typeof item.data().isoDate === "string")
+      .map((item) => item.data().isoDate as string),
+  )
+  const batch = admin.firestore().batch()
+  let created = 0
+  for (const item of snapshot.docs) {
+    const meeting = item.data()
+    if (meeting.kind !== "midweek" || typeof meeting.isoDate !== "string") continue
+    const isoDate = weekendIso(meeting.isoDate, weekendWeekday)
+    if (!isoDate || weekends.has(isoDate)) continue
+    const weekend = weekendProgram(congregationId, isoDate, weekendTime)
+    batch.set(admin.firestore().collection(MEETINGS).doc(weekend.id), weekend.data)
+    weekends.add(isoDate)
+    created += 1
+  }
+  if (created > 0) await batch.commit()
+  return created
+}
+
+export const ensureWeekendMeetings = functions.https.onCall(async (_data: unknown, context) => {
+  const manager = await requireManager(context)
+  const created = await saveMissingWeekends(manager.congregationId)
+  return { created }
 })
 
 export const cleanupMeetingImportFiles = functions.pubsub.schedule("every 60 minutes").onRun(async () => {

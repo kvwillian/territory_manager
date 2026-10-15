@@ -8,7 +8,7 @@
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
     "stamp-congregation-ids": "npm run build && node lib/stampCongregationIds.js",
-    "test": "tsx --test test/workbook.test.ts test/elderlySupport.test.ts",
+    "test": "tsx --test test/workbook.test.ts test/elderlySupport.test.ts test/publishers.test.ts",
     "logs": "firebase functions:log"
   },
   "engines": {

@@ -29,7 +29,7 @@ export type AssignmentRow = {
   driverPublisherId?: string
 }
 
-const weekdays = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+const weekdays = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado']
 
 const tones = [
   { bg: '#EEF2FF', fg: '#4338CA' },

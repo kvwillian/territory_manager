@@ -72,6 +72,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (location == '/mapas') return 'Mapas';
     if (location == '/menu') return 'Menu';
     if (location == '/field') return 'Territórios';
+    if (location == '/publishers' || location.startsWith('/publishers/')) {
+      return 'Publicadores';
+    }
     if (location == '/announcements') return 'Avisos';
     if (location == '/announcements/create') return 'Novo aviso';
     if (location == '/history') return 'Histórico';
@@ -237,6 +240,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     }
     if (location == '/menu' ||
         location.startsWith('/admin/') ||
+        location.startsWith('/publishers') ||
         location == '/announcements' ||
         location.startsWith('/announcements/') ||
         location == '/congregation' ||

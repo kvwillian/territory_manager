@@ -1,0 +1,117 @@
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+  --color-ink: #e7e9f2;
+  --color-muted: #9aa3b8;
+  --color-line: #2c3448;
+  --color-canvas: #0e1117;
+  --color-indigo: #818cf8;
+  --color-indigo-soft: #2a2758;
+  --color-card: #171b26;
+}
+
+html.dark .bg-white {
+  background-color: var(--color-card);
+}
+
+html.dark .bg-\[\#F8FAFC\],
+html.dark .hover\:bg-\[\#F8FAFC\]:hover {
+  background-color: #1c2333;
+}
+
+html.dark .bg-\[\#F3F5FB\],
+html.dark .hover\:bg-\[\#F3F5FB\]:hover {
+  background-color: #222838;
+}
+
+html.dark .bg-\[\#F5F7FF\] {
+  background-color: #1e2438;
+}
+
+html.dark .bg-\[\#E8EDF4\] {
+  background-color: #2a3344;
+}
+
+html.dark .bg-\[\#FEF3E2\] {
+  background-color: #3a2c18;
+}
+
+html.dark .bg-\[\#FDE8EF\] {
+  background-color: #3a1c28;
+}
+
+html.dark .bg-\[\#ECFDF5\] {
+  background-color: #12352c;
+}
+
+html.dark .bg-\[\#FEF3C7\] {
+  background-color: #3a3214;
+}
+
+html.dark .bg-\[\#F1F5F9\] {
+  background-color: #2a3142;
+}
+
+html.dark .bg-\[\#D5DDE8\] {
+  background-color: #3a4458;
+}
+
+html.dark .text-\[\#334155\] {
+  color: #cbd5e1;
+}
+
+html.dark .text-\[\#475569\],
+html.dark .text-\[\#64748B\] {
+  color: #94a3b8;
+}
+
+html.dark .text-\[\#0B0E14\] {
+  color: #e7e9f2;
+}
+
+html.dark .text-\[\#4338CA\] {
+  color: #a5b4fc;
+}
+
+html.dark .text-\[\#047857\] {
+  color: #6ee7b7;
+}
+
+html.dark .text-\[\#B45309\] {
+  color: #fbbf24;
+}
+
+html.dark .text-\[\#9F1239\] {
+  color: #fda4af;
+}
+
+html.dark .text-\[\#92400E\] {
+  color: #fcd34d;
+}
+
+html.dark .border-\[\#D5D9E6\] {
+  border-color: #3a4256;
+}
+
+html.dark .border-\[\#F3D7B0\] {
+  border-color: #6b5430;
+}
+
+html.dark .hover\:border-\[\#C7D2FE\]:hover {
+  border-color: #6366f1;
+}
+
+html.dark .placeholder\:text-\[\#94A3B8\]::placeholder {
+  color: #94a3b8;
+}
+
+html.dark button:hover:not(:disabled)::before {
+  background-color: color-mix(in srgb, white 10%, transparent);
+}
+
+html.dark button:active:not(:disabled)::before {
+  background-color: color-mix(in srgb, white 16%, transparent);
+}

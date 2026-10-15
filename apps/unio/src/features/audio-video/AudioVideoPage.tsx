@@ -4,7 +4,8 @@ import { useAccount } from '../../auth'
 import { meetingDatesInMonth } from '../../domain'
 import { useMeetings } from '../../store'
 import { AssigneeField } from './AssigneeField'
-import { usePublishers, type CongregationPublisher } from './publishers'
+import { usePublisherCatalog } from '../publishers/catalog'
+import type { MockPublisher } from '../publishers/mock'
 import type { ExportFormat } from './types'
 import {
   addRosterDay,
@@ -39,7 +40,8 @@ export function AudioVideoPage() {
   const [format, setFormat] = useState<ExportFormat>('xlsx')
   const [exporting, setExporting] = useState<'meeting' | 'month' | null>(null)
   const [newDay, setNewDay] = useState('')
-  const { publishers, status: publisherStatus } = usePublishers(account?.congregationId ?? null)
+  const { publishers } = usePublisherCatalog()
+  const publisherStatus = 'ready' as const
   const { meetings } = useMeetings()
 
   const roster = useMemo(
@@ -360,7 +362,7 @@ function AssignmentCell({
   row: RosterRow
   field: RosterField
   dark: boolean
-  publishers: CongregationPublisher[]
+  publishers: MockPublisher[]
   publisherStatus: 'loading' | 'ready' | 'error'
   onAssign: (index: number, name: string) => void
 }) {

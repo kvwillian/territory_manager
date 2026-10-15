@@ -4,7 +4,9 @@ import { BrowserRouter } from 'react-router-dom'
 import { App } from './App'
 import { AuthProvider, useAuth } from './auth'
 import { LoginPage } from './features/auth/LoginPage'
+import { PublishersProvider } from './features/publishers/catalog'
 import { MeetingsProvider } from './store'
+import { ThemeSync } from './theme'
 import './index.css'
 
 function Gate() {
@@ -20,9 +22,11 @@ function Gate() {
     return <LoginPage />
   }
   return (
-    <MeetingsProvider congregationId={authState.account.congregationId}>
-      <App />
-    </MeetingsProvider>
+    <PublishersProvider>
+      <MeetingsProvider congregationId={authState.account.congregationId}>
+        <App />
+      </MeetingsProvider>
+    </PublishersProvider>
   )
 }
 
@@ -30,6 +34,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
+        <ThemeSync />
         <Gate />
       </AuthProvider>
     </BrowserRouter>

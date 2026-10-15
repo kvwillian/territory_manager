@@ -153,7 +153,7 @@ class _QuickAccess extends StatelessWidget {
           icon: Icons.people_outline,
           background: const Color(0xFFEDE9FE),
           foreground: const Color(0xFF6D5BD0),
-          onTap: () => context.push('/module/publicadores'),
+          onTap: () => context.push('/publishers'),
         ),
       if (user.canAccess(AccessFlags.meetings))
         _QuickTile(

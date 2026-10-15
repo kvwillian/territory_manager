@@ -20,6 +20,7 @@ import { signOut } from 'firebase/auth'
 import { useAccount } from '../auth'
 import { auth } from '../firebase'
 import { useMeetings } from '../store'
+import { ThemeToggle } from '../theme'
 
 const items = [
   { to: '/inicio', label: 'Início', icon: Home },
@@ -47,7 +48,9 @@ function crumbsFor(pathname: string) {
   if (pathname.startsWith('/designacoes/limpeza')) return ['Designações', 'Limpeza']
   if (pathname.startsWith('/designacoes')) return ['Designações', 'Reuniões']
   if (pathname.startsWith('/agenda')) return ['Agenda']
-  if (pathname.startsWith('/publicadores')) return ['Publicadores']
+  if (pathname.startsWith('/publicadores/grupos')) return ['Publicadores', 'Grupos']
+  if (pathname.startsWith('/publicadores/estatisticas')) return ['Publicadores', 'Estatísticas']
+  if (pathname.startsWith('/publicadores')) return ['Publicadores', 'Lista']
   if (pathname.startsWith('/territorios')) return ['Territórios']
   if (pathname.startsWith('/relatorios')) return ['Relatórios']
   if (pathname.startsWith('/configuracoes')) return ['Configurações']
@@ -56,7 +59,7 @@ function crumbsFor(pathname: string) {
 
 export function AppShell() {
   const location = useLocation()
-  const { query, setQuery, sidebarCollapsed, toggleSidebar } = useMeetings()
+  const { query, setQuery, sidebarCollapsed, toggleSidebar, congregation } = useMeetings()
   const account = useAccount()
   const [noticesOpen, setNoticesOpen] = useState(false)
   const crumbs = crumbsFor(location.pathname)
@@ -68,9 +71,7 @@ export function AppShell() {
         className={`flex shrink-0 flex-col border-r border-line bg-white ${sidebarCollapsed ? 'w-[76px]' : 'w-[248px]'}`}
       >
         <div className={`flex items-center gap-2.5 px-4 py-4 ${sidebarCollapsed ? 'justify-center' : ''}`}>
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-indigo text-sm font-semibold text-white">
-            U
-          </span>
+          <img src="/logo.jpeg" alt="Unio" className="h-9 w-9 rounded-xl" />
           {sidebarCollapsed ? null : <span className="text-lg font-semibold tracking-tight">Unio</span>}
         </div>
 
@@ -80,8 +81,8 @@ export function AppShell() {
               <Building2 size={18} />
             </span>
             <span className="min-w-0">
-              <span className="block truncate text-sm font-medium">Congregação Central</span>
-              <span className="block text-xs text-muted">São Paulo, SP</span>
+              <span className="block truncate text-sm font-medium">{congregation.name}</span>
+              {congregation.place ? <span className="block truncate text-xs text-muted">{congregation.place}</span> : null}
             </span>
           </div>
         )}
@@ -199,6 +200,7 @@ export function AppShell() {
                 aria-label="Buscar designações"
               />
             </label>
+            <ThemeToggle />
             <div className="relative">
               <button
                 type="button"
