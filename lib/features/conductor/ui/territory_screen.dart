@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../territories/models/segment_model.dart';
@@ -15,7 +14,7 @@ import '../../../../shared/widgets/cached_territory_image.dart';
 import '../../../../shared/widgets/progress_indicator_bar.dart';
 
 /// Territory detail screen for conductors.
-/// Displays: territory image, progress, segment checklist, Open Maps, Save Progress.
+/// Displays: territory image, progress, segment checklist, notes, Open Maps, Save Progress.
 class TerritoryScreen extends ConsumerWidget {
   const TerritoryScreen({
     super.key,
@@ -62,6 +61,19 @@ class _TerritoryScreenContent extends ConsumerStatefulWidget {
 
 class _TerritoryScreenContentState extends ConsumerState<_TerritoryScreenContent> {
   final _checklistKey = GlobalKey<_SegmentChecklistState>();
+  late final TextEditingController _notesController;
+
+  @override
+  void initState() {
+    super.initState();
+    _notesController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
 
   Future<void> _saveProgress() async {
     final completedIds = _checklistKey.currentState?.completedIds ?? {};
@@ -79,6 +91,7 @@ class _TerritoryScreenContentState extends ConsumerState<_TerritoryScreenContent
           territoryId: widget.territoryId,
           conductorId: conductorId,
           statusBySegmentId: statusBySegmentId,
+          notes: _notesController.text.trim(),
         );
 
     ref.invalidate(territoriesProvider);
@@ -95,72 +108,84 @@ class _TerritoryScreenContentState extends ConsumerState<_TerritoryScreenContent
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.screenPadding),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    GestureDetector(
-                      onTap: () => _showExpandedImage(
-                        context,
-                        widget.territory.imageUrl,
-                      ),
-                      child: CachedTerritoryImage(
-                        imageUrl: widget.territory.imageUrl,
-                        width: double.infinity,
-                        height: 180,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Text(
-                      widget.territory.neighborhood,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    ProgressIndicatorBar(
-                      completed: widget.territory.completedCount,
-                      total: widget.territory.totalSegments,
-                      label: 'Segmentos concluídos',
-                    ),
-                    const SizedBox(height: AppSpacing.sectionSpacing),
-                    Text(
-                      'Ruas a cobrir',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    _SegmentChecklist(
-                      key: _checklistKey,
-                      territory: widget.territory,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
               padding: const EdgeInsets.all(AppSpacing.screenPadding),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (widget.territory.mapsUrl != null)
-                    FilledButton.icon(
-                      onPressed: () =>
-                          _openMaps(widget.territory.mapsUrl!),
-                      icon: const Icon(Icons.map),
-                      label: const Text('Abrir Google Maps'),
+                  GestureDetector(
+                    onTap: () => _showExpandedImage(
+                      context,
+                      widget.territory.imageUrl,
                     ),
-                  const SizedBox(height: AppSpacing.sm),
-                  OutlinedButton.icon(
-                    onPressed: _saveProgress,
-                    icon: const Icon(Icons.save_outlined),
-                    label: const Text('Salvar Progresso'),
+                    child: CachedTerritoryImage(
+                      imageUrl: widget.territory.imageUrl,
+                      width: double.infinity,
+                      height: 180,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    widget.territory.neighborhood,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  ProgressIndicatorBar(
+                    completed: widget.territory.completedCount,
+                    total: widget.territory.totalSegments,
+                    label: 'Segmentos concluídos',
+                  ),
+                  const SizedBox(height: AppSpacing.sectionSpacing),
+                  Text(
+                    'Segmentos do território',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  _SegmentChecklist(
+                    key: _checklistKey,
+                    territory: widget.territory,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  AppCard(
+                    child: TextField(
+                      controller: _notesController,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Comentário sobre o trabalho realizado',
+                        hintText: 'Ex.: Fizemos 26A e 26B; o 26B ficou pela metade',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.screenPadding),
+            child: Column(
+              children: [
+                if (widget.territory.mapsUrl != null)
+                  FilledButton.icon(
+                    onPressed: () =>
+                        _openMaps(widget.territory.mapsUrl!),
+                    icon: const Icon(Icons.map),
+                    label: const Text('Abrir Google Maps'),
+                  ),
+                const SizedBox(height: AppSpacing.sm),
+                OutlinedButton.icon(
+                  onPressed: _saveProgress,
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('Salvar Progresso'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -246,7 +271,8 @@ class _SegmentChecklistState extends ConsumerState<_SegmentChecklist> {
 
   @override
   Widget build(BuildContext context) {
-    final segments = widget.territory.segments;
+    final segments = List<SegmentModel>.from(widget.territory.segments)
+      ..sort((a, b) => a.description.compareTo(b.description));
 
     return AppCard(
       child: Column(
@@ -311,9 +337,6 @@ class _SegmentCheckbox extends StatelessWidget {
                 segment.description,
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       decoration: isChecked ? TextDecoration.lineThrough : null,
-                      color: isChecked
-                          ? AppColors.secondaryText
-                          : AppColors.primaryText,
                     ),
               ),
             ),

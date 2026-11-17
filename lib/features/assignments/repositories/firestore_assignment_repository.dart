@@ -49,7 +49,12 @@ class FirestoreAssignmentRepository implements AssignmentRepository {
           .collection(_collection)
           .where('congregationId', isEqualTo: cid)
           .get();
-      return snapshot.docs.map(_docToAssignment).toList();
+      return snapshot.docs
+          .where((d) =>
+              !d.id.startsWith('history_meta_') &&
+              d.data()['kind'] != 'history_meta')
+          .map(_docToAssignment)
+          .toList();
     } catch (e, st) {
       final isPermissionDenied = e.toString().contains('permission-denied') ||
           (e is FirebaseException && e.code == 'permission-denied');
@@ -103,6 +108,7 @@ class FirestoreAssignmentRepository implements AssignmentRepository {
           : assignment.conductorIds.first,
       'groupId': assignment.groupId,
       'territoryIds': assignment.territoryIds,
+      'assignedSegmentsByTerritory': assignment.assignedSegmentsByTerritory,
       'preachingSessionId': assignment.preachingSessionId,
       'updatedAt': Timestamp.fromDate(now),
     };
@@ -124,9 +130,6 @@ class FirestoreAssignmentRepository implements AssignmentRepository {
 
   @override
   Future<void> generateAssignments(DateTime weekStart) async {
-    // Generation delegates to repository that has access to sessions/territories.
-    // Firestore repo only does CRUD; generation logic stays in a service or
-    // a repository that composes.
     throw UnimplementedError(
       'generateAssignments not implemented for FirestoreAssignmentRepository; '
       'use OfflineAssignmentRepository or a service',
@@ -151,6 +154,33 @@ class FirestoreAssignmentRepository implements AssignmentRepository {
     if (conductorIds.isEmpty && legacy != null && legacy.isNotEmpty) {
       conductorIds = [legacy];
     }
+    final assignedSegmentsByTerritory = <String, List<String>>{};
+    final rawSegMap = data['assignedSegmentsByTerritory'];
+    if (rawSegMap is Map) {
+      for (final entry in rawSegMap.entries) {
+        final key = entry.key.toString();
+        final val = entry.value;
+        if (val is List) {
+          assignedSegmentsByTerritory[key] =
+              val.map((e) => e.toString()).toList();
+        }
+      }
+    }
+    final rawSnaps = data['territorySnapshots'];
+    if (rawSnaps is List) {
+      for (final item in rawSnaps) {
+        if (item is Map) {
+          final tid = item['id']?.toString() ?? '';
+          final segIds = item['assignedSegmentIds'];
+          if (tid.isNotEmpty &&
+              segIds is List &&
+              !assignedSegmentsByTerritory.containsKey(tid)) {
+            assignedSegmentsByTerritory[tid] =
+                segIds.map((e) => e.toString()).toList();
+          }
+        }
+      }
+    }
     return AssignmentModel(
       id: doc.id,
       date: dateTime,
@@ -158,6 +188,7 @@ class FirestoreAssignmentRepository implements AssignmentRepository {
       conductorIds: conductorIds,
       meetingLocationId: data['meetingLocationId'] as String?,
       territoryIds: territoryIds,
+      assignedSegmentsByTerritory: assignedSegmentsByTerritory,
       preachingSessionId: data['preachingSessionId'] as String?,
       congregationId: data['congregationId'] as String? ?? defaultCongregationId,
       groupId: data['groupId'] as String?,

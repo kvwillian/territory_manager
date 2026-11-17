@@ -104,6 +104,8 @@ function dutiesOf(publisher: RemotePublisher, isFemale: boolean): AssignmentDuty
 
 function asPublisher(data: RemotePublisher): MockPublisher {
   const hasMaleOnlyRole =
+    data.privilege === 'circuitOverseer' ||
+    data.privilege === 'superintendenteCircuito' ||
     data.privilege === 'elder' ||
     data.privilege === 'ministerial' ||
     data.privilege === 'ministerialServant' ||
@@ -125,7 +127,11 @@ function asPublisher(data: RemotePublisher): MockPublisher {
             : 'masculino'
   const isFemale = gender === 'feminino'
   const rawPrivilege =
-    data.privilege === 'ministerialServant' ? 'ministerial' : data.privilege
+    data.privilege === 'ministerial' || data.privilege === 'ministerialServant'
+      ? 'ministerialServant'
+      : data.privilege === 'circuitOverseer' || data.privilege === 'superintendenteCircuito'
+        ? 'circuitOverseer'
+        : data.privilege
   return {
     id: data.id,
     name: data.name ?? '',

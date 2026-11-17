@@ -224,14 +224,14 @@ export function ElderlySupportPage() {
   }
 
   return (
-    <div className="px-6 py-6 lg:px-8">
+    <div className="px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-indigo-soft text-indigo">
-            <Users size={22} />
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-indigo-soft text-indigo sm:h-12 sm:w-12">
+            <Users size={20} className="sm:h-[22px] sm:w-[22px]" />
           </span>
-          <div>
-            <h1 className="text-[28px] font-semibold tracking-tight">Suporte a idosos</h1>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">Suporte a idosos</h1>
             <p className="mt-1 text-sm text-muted">Organize as designações de carona para os nossos idosos.</p>
             {schedule ? (
               <div className="mt-2 flex items-center gap-3">

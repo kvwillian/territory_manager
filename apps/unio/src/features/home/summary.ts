@@ -61,8 +61,18 @@ export function publisherSummary(publishers: PublisherCount[], groupCount: numbe
   return {
     active: active.length,
     groups: groupCount,
-    privileged: active.filter((publisher) => publisher.privilege === 'elder' || publisher.privilege === 'ministerialServant').length,
-    pioneers: active.filter((publisher) => publisher.pioneer === 'auxiliary' || publisher.pioneer === 'regular').length,
+    privileged: active.filter(
+      (publisher) =>
+        publisher.privilege === 'circuitOverseer' ||
+        publisher.privilege === 'elder' ||
+        publisher.privilege === 'ministerialServant',
+    ).length,
+    pioneers: active.filter(
+      (publisher) =>
+        publisher.pioneer === 'special' ||
+        publisher.pioneer === 'auxiliary' ||
+        publisher.pioneer === 'regular',
+    ).length,
   }
 }
 

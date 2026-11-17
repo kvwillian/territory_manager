@@ -54,9 +54,9 @@ export function HomePage() {
   }
 
   return (
-    <div className="px-6 py-6 lg:px-8">
+    <div className="px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8">
       <p className="text-sm text-muted">{dateLine}</p>
-      <h1 className="mt-1 text-[32px] font-semibold tracking-tight">
+      <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-[32px]">
         {greeting(today.getHours())}, {firstName(account?.name ?? '')}!
       </h1>
       <p className="mt-1 text-sm text-muted">
@@ -64,45 +64,53 @@ export function HomePage() {
         {congregation.place ? ` · ${congregation.place}` : ''}
       </p>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-6 sm:gap-3 md:grid-cols-3 xl:grid-cols-6">
         {shortcuts.map((item) => (
-          <button key={item.to} type="button" onClick={() => navigate(item.to)} className={`rounded-2xl px-4 py-4 text-left ${item.className}`}>
+          <button
+            key={item.to}
+            type="button"
+            onClick={() => navigate(item.to)}
+            className={`min-w-0 rounded-2xl px-3.5 py-3.5 text-left sm:px-4 sm:py-4 ${item.className}`}
+          >
             <item.icon size={18} />
-            <span className="mt-3 block text-sm font-semibold">{item.label}</span>
-            <span className="mt-1 flex items-center gap-1 text-xs opacity-80">{item.hint} <ChevronRight size={12} /></span>
+            <span className="mt-2.5 block truncate text-sm font-semibold sm:mt-3">{item.label}</span>
+            <span className="mt-1 flex items-center gap-1 text-xs opacity-80">
+              <span className="truncate">{item.hint}</span>
+              <ChevronRight size={12} className="shrink-0" />
+            </span>
           </button>
         ))}
       </div>
 
-      <div className="mt-6 grid items-start gap-4 xl:grid-cols-2">
-        <section className="rounded-2xl border border-line bg-white">
-          <header className="flex items-center justify-between px-5 py-4">
+      <div className="mt-5 grid items-start gap-4 sm:mt-6 xl:grid-cols-2">
+        <section className="min-w-0 rounded-2xl border border-line bg-white">
+          <header className="flex items-center justify-between px-4 py-3.5 sm:px-5 sm:py-4">
             <h2 className="text-sm font-semibold">Próximas reuniões</h2>
             <button type="button" onClick={() => navigate('/designacoes/reunioes')} className="text-sm font-medium text-indigo">Ver todas</button>
           </header>
           {next.length === 0 ? (
-            <p className="border-t border-line px-5 py-8 text-sm text-muted">Nenhuma reunião cadastrada a partir de hoje.</p>
+            <p className="border-t border-line px-4 py-6 text-sm text-muted sm:px-5 sm:py-8">Nenhuma reunião cadastrada a partir de hoje.</p>
           ) : next.map((meeting) => {
             const date = parseIso(meeting.isoDate)
             return (
-              <button key={meeting.id} type="button" onClick={() => openMeeting(meeting)} className="flex w-full items-center gap-3 border-t border-line px-5 py-3 text-left">
-                <span className="grid h-12 w-12 place-items-center rounded-xl bg-[#FDE8EF] text-center text-[#9F1239]">
+              <button key={meeting.id} type="button" onClick={() => openMeeting(meeting)} className="flex w-full items-center gap-3 border-t border-line px-4 py-3 text-left sm:px-5">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#FDE8EF] text-center text-[#9F1239] sm:h-12 sm:w-12">
                   <span className="text-sm font-semibold leading-none">{date.getDate()}</span>
                   <span className="text-[10px] uppercase">{date.toLocaleString('pt-BR', { month: 'short' }).replace('.', '')}</span>
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium">{weekdayLong(meeting.isoDate)}</span>
+                  <span className="block truncate text-sm font-medium">{weekdayLong(meeting.isoDate)}</span>
                   <span className="block truncate text-xs text-muted">{kindMeta[meeting.kind].meetingLabel} · {meeting.time}</span>
                 </span>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusTone(meeting.status)}`}>{statusLabel[meeting.status]}</span>
-                <ChevronRight size={16} className="text-muted" />
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${statusTone(meeting.status)}`}>{statusLabel[meeting.status]}</span>
+                <ChevronRight size={16} className="shrink-0 text-muted" />
               </button>
             )
           })}
         </section>
 
-        <section className="rounded-2xl border border-line bg-white">
-          <header className="flex items-center justify-between px-5 py-4">
+        <section className="min-w-0 rounded-2xl border border-line bg-white">
+          <header className="flex items-center justify-between px-4 py-3.5 sm:px-5 sm:py-4">
             <h2 className="text-sm font-semibold">Escalas da semana</h2>
           </header>
           <BoardLine title="Áudio e vídeo" loading={boards.loading} error={boards.error} date={boards.audio?.iso} empty="Nenhuma designação de áudio e vídeo nesta semana." marks={boards.audio?.names.map(shortMark) ?? []} onOpen={() => navigate('/designacoes/audio-video')} />
@@ -110,13 +118,13 @@ export function HomePage() {
           <BoardLine title="Limpeza" loading={boards.loading} error={boards.error} date={cleaning?.iso} empty="Nenhum responsável de limpeza nesta semana." marks={cleaning ? [cleaning.name] : []} onOpen={() => navigate('/designacoes/limpeza')} />
         </section>
 
-        <section className="rounded-2xl border border-line bg-white">
-          <header className="flex items-center justify-between px-5 py-4">
+        <section className="min-w-0 rounded-2xl border border-line bg-white">
+          <header className="flex items-center justify-between px-4 py-3.5 sm:px-5 sm:py-4">
             <h2 className="text-sm font-semibold">Publicadores</h2>
             <button type="button" onClick={() => navigate('/publicadores')} className="text-sm font-medium text-indigo">Ver todos</button>
           </header>
-          {catalog.error ? <p className="border-t border-line px-5 py-8 text-sm text-[#9F1239]">{catalog.error}</p> : !catalog.ready ? <p className="border-t border-line px-5 py-8 text-sm text-muted">Carregando publicadores…</p> : (
-            <div className="grid grid-cols-2 gap-3 border-t border-line p-5">
+          {catalog.error ? <p className="border-t border-line px-4 py-6 text-sm text-[#9F1239] sm:px-5 sm:py-8">{catalog.error}</p> : !catalog.ready ? <p className="border-t border-line px-4 py-6 text-sm text-muted sm:px-5 sm:py-8">Carregando publicadores…</p> : (
+            <div className="grid grid-cols-2 gap-2.5 border-t border-line p-4 sm:gap-3 sm:p-5">
               <Count label="Publicadores ativos" value={counts.active} className="bg-[#E0F2FE] text-[#0369A1]" onClick={() => navigate('/publicadores')} />
               <Count label="Grupos" value={counts.groups} className="bg-[#F5F3FF] text-[#6D28D9]" onClick={() => navigate('/publicadores/grupos')} />
               <Count label="Anciãos e servos" value={counts.privileged} className="bg-[#ECFDF5] text-[#047857]" onClick={() => navigate('/publicadores')} />
@@ -125,14 +133,14 @@ export function HomePage() {
           )}
         </section>
 
-        <section className="grid gap-4">
-          <article className="rounded-2xl border border-line bg-white px-5 py-4">
+        <section className="grid min-w-0 gap-4">
+          <article className="rounded-2xl border border-line bg-white px-4 py-3.5 sm:px-5 sm:py-4">
             <h2 className="text-sm font-semibold">Relatórios de campo</h2>
-            <p className="mt-3 text-sm text-muted">O relatório mensal de serviço de campo ainda não é registrado aqui. Os totais não são calculados para não misturar com as sessões de território.</p>
+            <p className="mt-2.5 text-sm text-muted sm:mt-3">O relatório mensal de serviço de campo ainda não é registrado aqui. Os totais não são calculados para não misturar com as sessões de território.</p>
           </article>
-          <article className="rounded-2xl border border-line bg-white px-5 py-4">
+          <article className="rounded-2xl border border-line bg-white px-4 py-3.5 sm:px-5 sm:py-4">
             <h2 className="text-sm font-semibold">Atividades recentes</h2>
-            <p className="mt-3 text-sm text-muted">Não há um histórico de ações gravado. As publicações aparecem nas próprias telas de reunião, idosos, áudio e limpeza.</p>
+            <p className="mt-2.5 text-sm text-muted sm:mt-3">Não há um histórico de ações gravado. As publicações aparecem nas próprias telas de reunião, idosos, áudio e limpeza.</p>
           </article>
         </section>
       </div>
@@ -158,28 +166,28 @@ function BoardLine({
   onOpen: () => void
 }) {
   return (
-    <button type="button" onClick={onOpen} className="flex w-full items-center gap-3 border-t border-line px-5 py-3 text-left">
+    <button type="button" onClick={onOpen} className="flex w-full items-center gap-3 border-t border-line px-4 py-3 text-left sm:px-5">
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium">{title}</span>
-        <span className="block text-xs text-muted">
+        <span className="block truncate text-sm font-medium">{title}</span>
+        <span className="block truncate text-xs text-muted">
           {loading ? 'Carregando…' : error ? error : date ? `${weekdayLong(date)}, ${parseIso(date).getDate()}/${parseIso(date).getMonth() + 1}` : empty}
         </span>
       </span>
-      <span className="flex gap-1">
+      <span className="flex shrink-0 gap-1">
         {marks.slice(0, 3).map((mark, index) => (
           <span key={`${mark}-${index}`} className="grid h-7 min-w-7 place-items-center rounded-full bg-indigo-soft px-1 text-[11px] font-semibold text-indigo">{mark}</span>
         ))}
       </span>
-      <ChevronRight size={16} className="text-muted" />
+      <ChevronRight size={16} className="shrink-0 text-muted" />
     </button>
   )
 }
 
 function Count({ label, value, className, onClick }: { label: string; value: number; className: string; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className={`rounded-2xl px-4 py-4 text-left ${className}`}>
-      <span className="block text-2xl font-semibold">{value}</span>
-      <span className="mt-1 block text-xs">{label}</span>
+    <button type="button" onClick={onClick} className={`min-w-0 rounded-2xl p-3.5 text-left sm:px-4 sm:py-4 ${className}`}>
+      <span className="block text-xl font-semibold sm:text-2xl">{value}</span>
+      <span className="mt-1 block text-xs leading-snug">{label}</span>
     </button>
   )
 }

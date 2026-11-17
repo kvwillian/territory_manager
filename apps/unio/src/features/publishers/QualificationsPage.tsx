@@ -246,11 +246,17 @@ function countPublisherChanges(publisher: MockPublisher, draft: PublisherDraft):
 }
 
 function privilegeBadgeClass(publisher: Pick<MockPublisher, 'privilege' | 'pioneer' | 'gender'>): string {
+  if (publisher.gender !== 'feminino' && publisher.privilege === 'circuitOverseer') {
+    return 'border-[#FDE68A] bg-[#FEF3C7] text-[#92400E]'
+  }
   if (publisher.gender !== 'feminino' && publisher.privilege === 'elder') {
     return 'border-[#C7D2FE] bg-indigo-soft text-[#4338CA]'
   }
   if (publisher.gender !== 'feminino' && publisher.privilege === 'ministerialServant') {
     return 'border-[#DDD6FE] bg-[#F5F3FF] text-[#6D28D9]'
+  }
+  if (publisher.pioneer === 'special') {
+    return 'border-[#FDE68A] bg-[#FEF3C7] text-[#92400E]'
   }
   if (publisher.pioneer === 'regular' || publisher.pioneer === 'auxiliary') {
     return 'border-[#A5F3FC] bg-[#ECFEFF] text-[#0E7490]'
@@ -403,10 +409,12 @@ export function QualificationsPage() {
       if (groupIdFilter === 'none' && publisher.groupId) return false
       if (groupIdFilter && groupIdFilter !== 'none' && publisher.groupId !== groupIdFilter) return false
       if (genderFilter && publisher.gender !== genderFilter) return false
+      if (privilegeFilter === 'special' && publisher.pioneer !== 'special') return false
       if (privilegeFilter === 'auxiliary' && publisher.pioneer !== 'auxiliary') return false
       if (privilegeFilter === 'regular' && publisher.pioneer !== 'regular') return false
       if (
         privilegeFilter &&
+        privilegeFilter !== 'special' &&
         privilegeFilter !== 'auxiliary' &&
         privilegeFilter !== 'regular' &&
         publisher.privilege !== privilegeFilter
@@ -605,15 +613,15 @@ export function QualificationsPage() {
     : null
 
   return (
-    <div className="px-6 py-6 pb-16 lg:px-8">
+    <div className="px-3.5 py-4 pb-16 sm:px-6 sm:py-6 lg:px-8">
       {/* 1. Cabeçalho */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-indigo text-white shadow-[0_6px_16px_rgba(79,70,229,0.22)]">
-            <Users size={22} />
+        <div className="flex min-w-0 items-center gap-3 sm:gap-3.5">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-indigo text-white shadow-[0_6px_16px_rgba(79,70,229,0.22)] sm:h-12 sm:w-12">
+            <Users size={20} className="sm:h-[22px] sm:w-[22px]" />
           </span>
-          <div>
-            <h1 className="text-[26px] font-semibold tracking-tight text-ink">
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight text-ink sm:text-[26px]">
               Funções e habilitações
             </h1>
             <p className="mt-0.5 text-sm text-muted">
@@ -750,7 +758,7 @@ export function QualificationsPage() {
         <div
           role="tablist"
           aria-label="Visualizações de funções e habilitações"
-          className="inline-flex items-center gap-1 rounded-2xl border border-line bg-white p-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
+          className="no-scrollbar inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-2xl border border-line bg-white p-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
         >
           <TabButton
             active={activeTab === 'publicadores'}
@@ -812,7 +820,11 @@ export function QualificationsPage() {
               onGenderFilterChange={(val) => {
                 setGenderFilter(val)
                 if (val === 'feminino') {
-                  if (privilegeFilter === 'elder' || privilegeFilter === 'ministerialServant') {
+                  if (
+                    privilegeFilter === 'circuitOverseer' ||
+                    privilegeFilter === 'elder' ||
+                    privilegeFilter === 'ministerialServant'
+                  ) {
                     setPrivilegeFilter('')
                   }
                   if (
@@ -1068,10 +1080,14 @@ function PublishersTabView({
           <option value="">Todos os privilégios</option>
           {genderFilter !== 'feminino' ? (
             <>
+              <option value="circuitOverseer">Superintendente de Circuito</option>
               <option value="elder">Ancião</option>
               <option value="ministerialServant">Servo ministerial</option>
             </>
           ) : null}
+          <option value="special">
+            {genderFilter === 'feminino' ? 'Pioneira especial' : 'Pioneiro especial'}
+          </option>
           <option value="regular">
             {genderFilter === 'feminino' ? 'Pioneira regular' : 'Pioneiro regular'}
           </option>
@@ -1196,6 +1212,10 @@ function PublishersTabView({
                           style={{ background: tone.chip, color: tone.text }}
                         >
                           {group.name}
+                        </span>
+                      ) : publisher.privilege === 'circuitOverseer' ? (
+                        <span className="inline-flex items-center rounded-full border border-[#FDE68A] bg-[#FEF3C7] px-2.5 py-1 text-xs font-semibold text-[#92400E]">
+                          Circuito (Especial)
                         </span>
                       ) : (
                         <span className="inline-flex items-center rounded-full bg-[#F1F5F9] px-2.5 py-1 text-xs font-medium text-muted">
@@ -1777,6 +1797,10 @@ function FunctionsTabView({
                           >
                             {group.name}
                           </span>
+                        ) : publisher.privilege === 'circuitOverseer' ? (
+                          <span className="inline-flex rounded-full border border-[#FDE68A] bg-[#FEF3C7] px-2.5 py-1 text-xs font-semibold text-[#92400E]">
+                            Circuito (Especial)
+                          </span>
                         ) : (
                           <span className="inline-flex rounded-full bg-[#F1F5F9] px-2.5 py-1 text-xs font-medium text-muted">
                             Sem grupo
@@ -2076,21 +2100,24 @@ function PublisherEditDrawer({
 
             {publisher.gender !== 'feminino' ? (
               <label className="block">
-                <span className="text-xs font-medium text-muted">Privilégio</span>
+                <span className="text-xs font-medium text-muted">Privilégio / Cargo</span>
                 <select
                   value={publisher.privilege}
                   disabled={saving}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const nextPrivilege = event.target.value as MockPrivilege
                     onUpdateDraft((prev) => ({
                       ...prev,
-                      privilege: event.target.value as MockPrivilege,
+                      privilege: nextPrivilege,
+                      groupId: nextPrivilege === 'circuitOverseer' ? null : prev.groupId,
                     }))
-                  }
+                  }}
                   className="mt-1 h-10 w-full rounded-xl border border-line bg-white px-3 text-sm text-ink outline-none focus:border-indigo"
                 >
                   <option value="publisher">Publicador</option>
                   <option value="ministerialServant">Servo ministerial</option>
                   <option value="elder">Ancião</option>
+                  <option value="circuitOverseer">Superintendente de Circuito (Especial)</option>
                 </select>
               </label>
             ) : null}
@@ -2098,7 +2125,9 @@ function PublisherEditDrawer({
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="text-xs font-medium text-muted">
-                  {publisher.gender === 'feminino' ? 'Pioneira' : 'Pioneiro'}
+                  {publisher.gender === 'feminino'
+                    ? 'Pioneira / Tipo especial'
+                    : 'Pioneiro / Tipo especial'}
                 </span>
                 <select
                   value={publisher.pioneer}
@@ -2119,6 +2148,9 @@ function PublisherEditDrawer({
                   </option>
                   <option value="regular">
                     {publisher.gender === 'feminino' ? 'Pioneira regular' : 'Pioneiro regular'}
+                  </option>
+                  <option value="special">
+                    {publisher.gender === 'feminino' ? 'Pioneira especial' : 'Pioneiro especial'}
                   </option>
                 </select>
               </label>

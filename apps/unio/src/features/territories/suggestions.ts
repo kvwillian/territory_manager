@@ -23,6 +23,8 @@ export type SuggestedTerritoryItem = {
   snapshot: TerritoryStatusSnapshot
   priorityTier: 1 | 2 | 3
   reasons: string[]
+  recommendedSegmentIds?: string[]
+  recommendedSegmentCodes?: string[]
 }
 
 export type DiscardedTerritoryItem = {
@@ -204,7 +206,17 @@ export function suggestTerritories(params: {
     const isPendingPartialCompletion =
       snap.pendingSiblingCompletion || snap.hasPartialSegments || Boolean(snap.hasIncompleteWork)
     if (isPendingPartialCompletion) {
-      if (snap.hasIncompleteWork) {
+      if (snap.missingSegmentCodes && snap.missingSegmentCodes.length > 0) {
+        const missingStr = snap.missingSegmentCodes.join(', ')
+        const doneStr =
+          snap.completedSegmentCodes && snap.completedSegmentCodes.length > 0
+            ? ` (${snap.completedSegmentCodes.join(', ')} já trabalhado)`
+            : ''
+        partiallyCompleted.push({
+          territory,
+          detail: `Faltando concluir: ${missingStr}${doneStr}`,
+        })
+      } else if (snap.hasIncompleteWork) {
         const stateLabel =
           snap.lastWorkCompletionState === 'incomplete'
             ? 'Incompleto'
@@ -333,6 +345,12 @@ export function suggestTerritories(params: {
     snapshot: c.snapshot,
     priorityTier: c.tier,
     reasons: c.reasons,
+    ...(c.snapshot.missingSegmentIds && c.snapshot.missingSegmentIds.length > 0
+      ? { recommendedSegmentIds: c.snapshot.missingSegmentIds }
+      : {}),
+    ...(c.snapshot.missingSegmentCodes && c.snapshot.missingSegmentCodes.length > 0
+      ? { recommendedSegmentCodes: c.snapshot.missingSegmentCodes }
+      : {}),
   }))
 
   const summaryReasons = buildSummaryReasons({
@@ -384,7 +402,16 @@ function scoreCandidate(params: {
   const ageSortKey = snap.daysSinceLastWork === null ? 100_000 : snap.daysSinceLastWork
 
   const reasons: string[] = []
-  if (snap.hasIncompleteWork) {
+  if (snap.missingSegmentCodes && snap.missingSegmentCodes.length > 0) {
+    const missingStr = snap.missingSegmentCodes.join(', ')
+    const doneStr =
+      snap.completedSegmentCodes && snap.completedSegmentCodes.length > 0
+        ? ` (${snap.completedSegmentCodes.join(', ')} já trabalhado)`
+        : ''
+    reasons.push(
+      `Prioridade máxima: falta concluir ${missingStr} no território ${territory.code}${doneStr}.`,
+    )
+  } else if (snap.hasIncompleteWork) {
     const stateLabel =
       snap.lastWorkCompletionState === 'incomplete'
         ? 'incompleto'
@@ -401,7 +428,10 @@ function scoreCandidate(params: {
       `Prioridade máxima: conclui o território ${territory.baseNumber} (${snap.completedSiblingCodes.join(', ')} já foi trabalhado).`,
     )
   }
-  if (snap.hasPartialSegments) {
+  if (
+    snap.hasPartialSegments &&
+    !(snap.missingSegmentCodes && snap.missingSegmentCodes.length > 0)
+  ) {
     reasons.push(
       `Prioridade máxima: conclui trechos pendentes (${snap.completedSegments}/${snap.totalSegments} já trabalhados).`,
     )
@@ -525,10 +555,28 @@ function buildSummaryReasons(params: {
   const bullets: string[] = []
   const plural = recommended.length > 1
 
-  const partialWork = recommended.find((r) => r.snapshot.hasIncompleteWork)
+  const partialMissingSeg = recommended.find(
+    (r) => r.recommendedSegmentCodes && r.recommendedSegmentCodes.length > 0,
+  )
+  const partialWork = recommended.find(
+    (r) => r.snapshot.hasIncompleteWork && !(r.recommendedSegmentCodes?.length),
+  )
   const partialSibling = recommended.find((r) => r.snapshot.pendingSiblingCompletion)
-  const partialSeg = recommended.find((r) => r.snapshot.hasPartialSegments)
+  const partialSeg = recommended.find(
+    (r) => r.snapshot.hasPartialSegments && !(r.recommendedSegmentCodes?.length),
+  )
 
+  if (partialMissingSeg) {
+    const missingStr = partialMissingSeg.recommendedSegmentCodes!.join(', ')
+    const doneStr =
+      partialMissingSeg.snapshot.completedSegmentCodes &&
+      partialMissingSeg.snapshot.completedSegmentCodes.length > 0
+        ? ` (${partialMissingSeg.snapshot.completedSegmentCodes.join(', ')} já trabalhado)`
+        : ''
+    bullets.push(
+      `Prioriza concluir o que está faltando no território ${partialMissingSeg.territory.code}: ${missingStr}${doneStr}.`,
+    )
+  }
   if (partialWork) {
     const label =
       partialWork.snapshot.lastWorkCompletionState === 'incomplete'

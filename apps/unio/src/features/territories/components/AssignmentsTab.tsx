@@ -44,6 +44,7 @@ import type {
   RecurringDepartureRecord,
   TerritoryAssignmentRecord,
   TerritoryRecord,
+  TerritorySegmentStatusItem,
   TerritorySnapshotItem,
 } from '../types'
 import {
@@ -127,8 +128,11 @@ export function AssignmentsTab({
     conductorOptions,
     sundayGroups,
     getDefaultConductorsFor,
+    resolveConductors,
+    saveTerritorySegments,
     saveAssignment,
     deleteAssignment,
+    recordTerritoryExecution,
   } = useTerritories()
 
   const todayIso = useMemo(() => isoFromDate(new Date()), [])
@@ -147,8 +151,21 @@ export function AssignmentsTab({
   const [groupName, setGroupName] = useState<string>('')
   const [conductorNames, setConductorNames] = useState<string[]>([])
   const [selectedTerritoryIds, setSelectedTerritoryIds] = useState<string[]>([])
+  const [assignedSegmentsByTerritory, setAssignedSegmentsByTerritory] = useState<
+    Record<string, string[]>
+  >({})
   const [notes, setNotes] = useState('')
   const [isDirty, setIsDirty] = useState(false)
+
+  // Execution feedback state per territory (for marking segments done + comment on the day)
+  const [execDoneSegmentsByTerritory, setExecDoneSegmentsByTerritory] = useState<
+    Record<string, string[]>
+  >({})
+  const [execCommentByTerritory, setExecCommentByTerritory] = useState<Record<string, string>>({})
+  const [execPartialFlagByTerritory, setExecPartialFlagByTerritory] = useState<
+    Record<string, boolean>
+  >({})
+  const [savingExecutionTerritoryId, setSavingExecutionTerritoryId] = useState<string | null>(null)
 
   // Suggestion controls
   const [requestedVolume, setRequestedVolume] = useState<number | undefined>(undefined)
@@ -180,6 +197,19 @@ export function AssignmentsTab({
     () => new Map(territories.map((t) => [t.id, t])),
     [territories],
   )
+
+  const segmentsByTerritoryId = useMemo(() => {
+    const map = new Map<string, typeof segments>()
+    for (const seg of segments) {
+      const bucket = map.get(seg.territoryId)
+      if (bucket) bucket.push(seg)
+      else map.set(seg.territoryId, [seg])
+    }
+    for (const bucket of map.values()) {
+      bucket.sort((a, b) => compareTerritoryCodes(a.description, b.description))
+    }
+    return map
+  }, [segments])
 
   // Compute the 7 days of the selected week (Monday -> Sunday)
   const weekDays = useMemo(() => {
@@ -224,6 +254,11 @@ export function AssignmentsTab({
     const coveredSessionIds = new Set(
       savedOnDate.map((a) => a.preachingSessionId).filter((x): x is string => Boolean(x)),
     )
+    const coveredGroupKeys = new Set<string>()
+    for (const saved of savedOnDate) {
+      if (saved.groupId) coveredGroupKeys.add(`id:${saved.groupId}`)
+      if (saved.groupName?.trim()) coveredGroupKeys.add(`name:${saved.groupName.trim().toLowerCase()}`)
+    }
 
     const slots: DaySlotSource[] = []
 
@@ -261,6 +296,17 @@ export function AssignmentsTab({
 
     for (const rec of activeRecurringOnDay) {
       if (coveredSessionIds.has(rec.id)) continue
+      if (rec.sundayGroupId && coveredGroupKeys.has(`id:${rec.sundayGroupId}`)) continue
+      if (
+        rec.sundayGroupName?.trim() &&
+        coveredGroupKeys.has(`name:${rec.sundayGroupName.trim().toLowerCase()}`)
+      ) {
+        continue
+      }
+      if (rec.sundayGroupId) coveredGroupKeys.add(`id:${rec.sundayGroupId}`)
+      if (rec.sundayGroupName?.trim()) {
+        coveredGroupKeys.add(`name:${rec.sundayGroupName.trim().toLowerCase()}`)
+      }
       const recConductors =
         rec.conductorNames.length > 0
           ? rec.conductorNames
@@ -288,6 +334,55 @@ export function AssignmentsTab({
         territoryIds: [],
         notes: '',
       })
+    }
+
+    // On Sundays, ensure every congregation group has its own dedicated departure slot
+    if (dayKey === 'sunday') {
+      for (const grp of sundayGroups) {
+        if (
+          coveredGroupKeys.has(`id:${grp.id}`) ||
+          coveredGroupKeys.has(`name:${grp.name.trim().toLowerCase()}`)
+        ) {
+          continue
+        }
+        const prevGroupAssign = assignments.find(
+          (a) =>
+            a.periodType === 'sunday' &&
+            (a.groupId === grp.id ||
+              (a.groupName ?? '').trim().toLowerCase() === grp.name.trim().toLowerCase()),
+        )
+        const defaultLocId =
+          prevGroupAssign?.meetingLocationId ?? locations[0]?.id ?? null
+        const defaultLocName =
+          prevGroupAssign?.locationName ?? locations[0]?.name ?? ''
+        const grpConductors = getDefaultConductorsFor({
+          meetingLocationId: defaultLocId,
+          locationName: defaultLocName,
+          dayOfWeek: 'sunday',
+          groupId: grp.id,
+          groupName: grp.name,
+        })
+        slots.push({
+          slotKey: `group:${grp.id}`,
+          savedAssignment: null,
+          recurringTemplate: null,
+          periodType: 'sunday',
+          startTime: prevGroupAssign?.startTime ?? '09:00',
+          meetingLocationId: defaultLocId,
+          preachingSessionId: null,
+          locationName: defaultLocName,
+          groupId: grp.id,
+          groupName: grp.name,
+          conductorNames:
+            grpConductors.length > 0
+              ? grpConductors
+              : grp.superintendentName
+                ? [grp.superintendentName]
+                : [],
+          territoryIds: [],
+          notes: '',
+        })
+      }
     }
 
     const extraCount = extraManualSlots[selectedIsoDate] ?? 0
@@ -375,6 +470,81 @@ export function AssignmentsTab({
 
   const safeSlotIndex = Math.min(selectedSlotIndex, Math.max(0, daySlots.length - 1))
   const activeSlot = daySlots[safeSlotIndex]!
+  const currentSavedAssignmentId = activeSlot.savedAssignment?.id
+
+  // Status snapshots for all territories relative to selectedIsoDate
+  const statusesById = useMemo(
+    () =>
+      computeTerritoryStatuses({
+        territories,
+        segments,
+        assignments,
+        workSessions,
+        referenceIsoDate: selectedIsoDate,
+        excludeAssignmentId: currentSavedAssignmentId,
+      }),
+    [territories, segments, assignments, workSessions, selectedIsoDate, currentSavedAssignmentId],
+  )
+
+  // Effective segments per territory (merges registered segments + historical part codes from workSessions)
+  const effectiveSegmentsByTerritoryId = useMemo(() => {
+    const map = new Map<string, TerritorySegmentStatusItem[]>()
+    for (const t of territories) {
+      const snap = statusesById.get(t.id)
+      const items = snap?.segmentItems ? [...snap.segmentItems] : []
+      if (items.length === 0) {
+        const regSegs = segmentsByTerritoryId.get(t.id) ?? []
+        for (const s of regSegs) {
+          items.push({
+            id: s.id,
+            code: s.description.trim() || t.code,
+            status: s.status === 'completed' ? 'completed' : 'pending',
+            lastWorkedIsoDate: s.lastWorkedIsoDate,
+            isMissingInCycle: s.status !== 'completed',
+          })
+        }
+      }
+      items.sort((a, b) => compareTerritoryCodes(a.code, b.code))
+      if (items.length > 0) {
+        map.set(t.id, items)
+      }
+    }
+    return map
+  }, [territories, statusesById, segmentsByTerritoryId])
+
+  const getDefaultSegmentSelectionForTerritory = (territoryId: string): string[] => {
+    const snap = statusesById.get(territoryId)
+    const effSegs = effectiveSegmentsByTerritoryId.get(territoryId) ?? []
+    if (effSegs.length === 0) return []
+    if (snap?.missingSegmentIds && snap.missingSegmentIds.length > 0) {
+      return snap.missingSegmentIds
+    }
+    const nonCompleted = effSegs.filter((s) => s.status !== 'completed')
+    if (nonCompleted.length > 0 && nonCompleted.length < effSegs.length) {
+      return nonCompleted.map((s) => s.id)
+    }
+    return effSegs.map((s) => s.id)
+  }
+
+  const resolveChosenSegmentsForTerritory = (
+    territoryId: string,
+    rawAssigned?: string[],
+  ): TerritorySegmentStatusItem[] => {
+    const effSegs = effectiveSegmentsByTerritoryId.get(territoryId) ?? []
+    if (effSegs.length === 0) return []
+    const effectiveList =
+      rawAssigned && rawAssigned.length > 0
+        ? rawAssigned
+        : getDefaultSegmentSelectionForTerritory(territoryId)
+    const idSet = new Set(effectiveList)
+    const upperCodeSet = new Set(effectiveList.map((v) => v.trim().toUpperCase()))
+    const matched = effSegs.filter(
+      (s) => idSet.has(s.id) || upperCodeSet.has(s.code.trim().toUpperCase()),
+    )
+    return matched.length > 0 ? matched : effSegs
+  }
+
+  const [splittingTerritoryId, setSplittingTerritoryId] = useState<string | null>(null)
 
   // Sync local form whenever activeSlot identity changes
   useEffect(() => {
@@ -388,6 +558,38 @@ export function AssignmentsTab({
     setGroupName(activeSlot.groupName ?? '')
     setConductorNames(activeSlot.conductorNames)
     setSelectedTerritoryIds(activeSlot.territoryIds)
+
+    const initialAssignedSegs: Record<string, string[]> = {
+      ...(activeSlot.savedAssignment?.assignedSegmentsByTerritory ?? {}),
+    }
+    for (const snapItem of activeSlot.savedAssignment?.territorySnapshots ?? []) {
+      if (
+        !initialAssignedSegs[snapItem.id] &&
+        snapItem.assignedSegmentCodes &&
+        snapItem.assignedSegmentCodes.length > 0
+      ) {
+        initialAssignedSegs[snapItem.id] = snapItem.assignedSegmentCodes
+      }
+    }
+    for (const tid of activeSlot.territoryIds) {
+      if (!initialAssignedSegs[tid]) {
+        const defaults = getDefaultSegmentSelectionForTerritory(tid)
+        if (defaults.length > 0) {
+          initialAssignedSegs[tid] = defaults
+        }
+      }
+    }
+    setAssignedSegmentsByTerritory(initialAssignedSegs)
+
+    const initialExecDone: Record<string, string[]> = {}
+    for (const tid of activeSlot.territoryIds) {
+      const effSegs = effectiveSegmentsByTerritoryId.get(tid) ?? []
+      initialExecDone[tid] = effSegs.filter((s) => s.status === 'completed').map((s) => s.id)
+    }
+    setExecDoneSegmentsByTerritory(initialExecDone)
+    setExecCommentByTerritory({})
+    setExecPartialFlagByTerritory({})
+
     setNotes(activeSlot.notes)
     setIsDirty(false)
     setRequestedVolume(undefined)
@@ -397,6 +599,7 @@ export function AssignmentsTab({
     selectedIsoDate,
     activeSlot.slotKey,
     activeSlot.savedAssignment?.updatedAtIso,
+    segmentsByTerritoryId,
   ])
 
   // Hydrate pre-selected conductors / location when async catalog finishes loading and form isn't dirty
@@ -455,22 +658,6 @@ export function AssignmentsTab({
     }
     return null
   }, [linkedRecurring, linkedLocation])
-
-  const currentSavedAssignmentId = activeSlot.savedAssignment?.id
-
-  // Status snapshots for all territories relative to selectedIsoDate
-  const statusesById = useMemo(
-    () =>
-      computeTerritoryStatuses({
-        territories,
-        segments,
-        assignments,
-        workSessions,
-        referenceIsoDate: selectedIsoDate,
-        excludeAssignmentId: currentSavedAssignmentId,
-      }),
-    [territories, segments, assignments, workSessions, selectedIsoDate, currentSavedAssignmentId],
-  )
 
   // Available territories for this departure grouped by region
   const availableByRegion = useMemo(() => {
@@ -555,11 +742,34 @@ export function AssignmentsTab({
   }, [selectedTerritoryIds, territoriesById])
 
   const previewTerritoryCodes = useMemo(() => {
-    if (selectedTerritoryObjects.length > 0) {
-      return selectedTerritoryObjects.map((t) => t.code)
+    const formatTerritoryWithSegments = (t: TerritoryRecord): string => {
+      const effSegs = effectiveSegmentsByTerritoryId.get(t.id) ?? []
+      if (effSegs.length === 0) return t.code
+      const chosenSegs = resolveChosenSegmentsForTerritory(
+        t.id,
+        assignedSegmentsByTerritory[t.id],
+      )
+      if (chosenSegs.length === 0 || chosenSegs.length === effSegs.length) {
+        return t.code
+      }
+      return chosenSegs.map((s) => s.code).join(', ')
     }
-    return suggestion.recommended.map((r) => r.territory.code)
-  }, [selectedTerritoryObjects, suggestion.recommended])
+
+    if (selectedTerritoryObjects.length > 0) {
+      return selectedTerritoryObjects.map(formatTerritoryWithSegments)
+    }
+    return suggestion.recommended.map((r) => {
+      if (r.recommendedSegmentCodes && r.recommendedSegmentCodes.length > 0) {
+        return r.recommendedSegmentCodes.join(', ')
+      }
+      return formatTerritoryWithSegments(r.territory)
+    })
+  }, [
+    selectedTerritoryObjects,
+    suggestion.recommended,
+    effectiveSegmentsByTerritoryId,
+    assignedSegmentsByTerritory,
+  ])
 
   // Live WhatsApp Message
   const whatsappMessage = useMemo(
@@ -571,10 +781,7 @@ export function AssignmentsTab({
         locationName,
         groupName: periodType === 'sunday' ? groupName : null,
         conductorNames,
-        territoryCodes:
-          selectedTerritoryObjects.length > 0
-            ? selectedTerritoryObjects.map((t) => t.code)
-            : previewTerritoryCodes,
+        territoryCodes: previewTerritoryCodes,
       }),
     [
       selectedIsoDate,
@@ -583,7 +790,6 @@ export function AssignmentsTab({
       locationName,
       groupName,
       conductorNames,
-      selectedTerritoryObjects,
       previewTerritoryCodes,
     ],
   )
@@ -669,20 +875,212 @@ export function AssignmentsTab({
     }
     setErrorBanner('')
     setIsDirty(true)
-    setSelectedTerritoryIds((curr) =>
-      curr.includes(territoryId)
-        ? curr.filter((id) => id !== territoryId)
-        : [...curr, territoryId],
-    )
+    setSelectedTerritoryIds((curr) => {
+      const exists = curr.includes(territoryId)
+      if (exists) {
+        return curr.filter((id) => id !== territoryId)
+      }
+      const defaults = getDefaultSegmentSelectionForTerritory(territoryId)
+      if (defaults.length > 0) {
+        setAssignedSegmentsByTerritory((prev) => ({
+          ...prev,
+          [territoryId]: prev[territoryId]?.length ? prev[territoryId]! : defaults,
+        }))
+      }
+      return [...curr, territoryId]
+    })
+  }
+
+  function toggleAssignedSegment(territoryId: string, segment: TerritorySegmentStatusItem) {
+    if (!canManage) return
+    const effSegs = effectiveSegmentsByTerritoryId.get(territoryId) ?? []
+    setIsDirty(true)
+    setAssignedSegmentsByTerritory((curr) => {
+      const currentlyChosen = resolveChosenSegmentsForTerritory(
+        territoryId,
+        curr[territoryId],
+      )
+      const chosenIdSet = new Set(currentlyChosen.map((s) => s.id))
+      const isSelected = chosenIdSet.has(segment.id)
+      const nextChosen = isSelected
+        ? currentlyChosen.filter((s) => s.id !== segment.id)
+        : [...currentlyChosen, segment]
+      // If user unchecks the last segment, keep at least that segment selected
+      const finalChosen = nextChosen.length > 0 ? nextChosen : [segment]
+      const finalIds = effSegs
+        .filter((s) => finalChosen.some((c) => c.id === s.id))
+        .map((s) => s.id)
+      return {
+        ...curr,
+        [territoryId]: finalIds,
+      }
+    })
+  }
+
+  function selectMissingSegmentsOnly(territoryId: string) {
+    if (!canManage) return
+    const snap = statusesById.get(territoryId)
+    const effSegs = effectiveSegmentsByTerritoryId.get(territoryId) ?? []
+    const missingIds =
+      snap?.missingSegmentIds && snap.missingSegmentIds.length > 0
+        ? snap.missingSegmentIds
+        : effSegs.filter((s) => s.status !== 'completed').map((s) => s.id)
+    if (missingIds.length === 0) return
+    setIsDirty(true)
+    setAssignedSegmentsByTerritory((curr) => ({
+      ...curr,
+      [territoryId]: missingIds,
+    }))
+  }
+
+  function selectAllTerritorySegments(territoryId: string) {
+    if (!canManage) return
+    const effSegs = effectiveSegmentsByTerritoryId.get(territoryId) ?? []
+    if (effSegs.length === 0) return
+    setIsDirty(true)
+    setAssignedSegmentsByTerritory((curr) => ({
+      ...curr,
+      [territoryId]: effSegs.map((s) => s.id),
+    }))
+  }
+
+  async function handleQuickSplitForDesignation(
+    territory: TerritoryRecord,
+    totalParts: number,
+    selectCodes?: string[],
+  ) {
+    if (!canManage) return
+    const base = territory.baseNumber || territory.code
+    const nextSegInputs = Array.from({ length: totalParts }, (_, i) => {
+      const letter = String.fromCharCode(65 + i)
+      return {
+        description: `${base}${letter}`,
+        status: 'pending' as const,
+        lastWorkedIsoDate: null,
+      }
+    })
+    const codesToSelect =
+      selectCodes && selectCodes.length > 0
+        ? selectCodes
+        : nextSegInputs.map((s) => s.description)
+
+    setAssignedSegmentsByTerritory((prev) => ({
+      ...prev,
+      [territory.id]: codesToSelect,
+    }))
+    setIsDirty(true)
+    setSplittingTerritoryId(territory.id)
+    try {
+      await saveTerritorySegments(territory.id, nextSegInputs)
+      showToast(
+        `Território ${territory.code} dividido em ${nextSegInputs.map((s) => s.description).join(', ')} (${codesToSelect.join(', ')} selecionado).`,
+      )
+    } catch (err) {
+      setErrorBanner(
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível dividir os segmentos deste território.',
+      )
+    } finally {
+      setSplittingTerritoryId(null)
+    }
   }
 
   function applySuggestion() {
     if (!canManage) return
     const ids = suggestion.recommended.map((item) => item.territory.id)
     setSelectedTerritoryIds(ids)
+    setAssignedSegmentsByTerritory((prev) => {
+      const next = { ...prev }
+      for (const item of suggestion.recommended) {
+        const tid = item.territory.id
+        if (item.recommendedSegmentIds && item.recommendedSegmentIds.length > 0) {
+          next[tid] = item.recommendedSegmentIds
+        } else {
+          const defaults = getDefaultSegmentSelectionForTerritory(tid)
+          if (defaults.length > 0) {
+            next[tid] = defaults
+          }
+        }
+      }
+      return next
+    })
     setIsDirty(true)
     setErrorBanner('')
     showToast(`Sugestão aplicada: ${ids.length} território(s) selecionado(s).`)
+  }
+
+  async function handleRecordExecutionForTerritory(territory: TerritoryRecord) {
+    const effSegs = effectiveSegmentsByTerritoryId.get(territory.id) ?? []
+    const realSegs = segmentsByTerritoryId.get(territory.id) ?? []
+    const completedIds = execDoneSegmentsByTerritory[territory.id] ?? []
+    const completedSet = new Set(completedIds)
+
+    const realCompletedIds = realSegs
+      .filter((s) => completedSet.has(s.id) || completedSet.has(s.description))
+      .map((s) => s.id)
+    const realPendingIds = realSegs
+      .filter((s) => !completedSet.has(s.id) && !completedSet.has(s.description))
+      .map((s) => s.id)
+
+    const comment = (execCommentByTerritory[territory.id] ?? '').trim()
+    const isExplicitlyPartial = Boolean(execPartialFlagByTerritory[territory.id])
+    const commentMentionsPartial =
+      /\b(parte|metade|parcial|incompleto|falta)\b/i.test(comment)
+
+    const allSegmentsDone =
+      effSegs.length > 0 ? completedIds.length >= effSegs.length : true
+    const completionState =
+      isExplicitlyPartial || commentMentionsPartial || !allSegmentsDone
+        ? 'partial'
+        : 'completed'
+
+    const resolvedCond = resolveConductors(conductorNames)
+    const primaryConductorName =
+      resolvedCond.names[0] ?? conductorNames[0] ?? 'Dirigente'
+    const completedDescs = effSegs
+      .filter((s) => completedSet.has(s.id) || completedSet.has(s.code))
+      .map((s) => s.code)
+
+    const noteParts: string[] = []
+    if (completedDescs.length > 0) {
+      noteParts.push(`Segmentos feitos: ${completedDescs.join(', ')}`)
+    }
+    if (isExplicitlyPartial && !commentMentionsPartial) {
+      noteParts.push('Trabalho parcial / pela metade')
+    }
+    if (comment) {
+      noteParts.push(comment)
+    }
+
+    setSavingExecutionTerritoryId(territory.id)
+    setErrorBanner('')
+    try {
+      await recordTerritoryExecution({
+        territoryId: territory.id,
+        isoDate: selectedIsoDate,
+        conductorName: primaryConductorName,
+        conductorUserId: resolvedCond.userIds[0] ?? null,
+        conductorPublisherId: resolvedCond.publisherIds[0] ?? null,
+        completedSegmentIds: realCompletedIds,
+        pendingSegmentIds: realPendingIds,
+        completionState,
+        notes: noteParts.join(' · '),
+        regionId: territory.regionId,
+        regionName: territory.regionName,
+        territoryCodeRaw:
+          completedDescs.length > 0 ? completedDescs.join(', ') : territory.code,
+      })
+      showToast(`Execução do território ${territory.code} registrada com sucesso!`)
+    } catch (err) {
+      setErrorBanner(
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível registrar a execução deste território.',
+      )
+    } finally {
+      setSavingExecutionTerritoryId(null)
+    }
   }
 
   async function handlePersist(targetStatus: 'draft' | 'assigned') {
@@ -715,19 +1113,55 @@ export function AssignmentsTab({
       }
     }
 
+    const cleanAssignedSegmentsMap: Record<string, string[]> = {}
     const snapshots: TerritorySnapshotItem[] = effectiveTerritoryIds.map((tid) => {
       const t = territoriesById.get(tid)
+      const effSegs = effectiveSegmentsByTerritoryId.get(tid) ?? []
+      const chosenSegs = resolveChosenSegmentsForTerritory(
+        tid,
+        assignedSegmentsByTerritory[tid],
+      )
+      const chosenCodes = chosenSegs.map((s) => s.code)
+      // Store both IDs and codes when segments are inferred, or IDs when registered
+      const storedIdentifiers = chosenSegs.map((s) =>
+        s.id.startsWith('inferred:') ? s.code : s.id,
+      )
+      if (storedIdentifiers.length > 0) {
+        cleanAssignedSegmentsMap[tid] = storedIdentifiers
+      }
+      const isSubsetSelected =
+        effSegs.length > 0 &&
+        chosenCodes.length > 0 &&
+        chosenCodes.length < effSegs.length
       return {
         id: tid,
-        code: t?.code ?? tid,
+        code: isSubsetSelected ? chosenCodes.join(', ') : (t?.code ?? tid),
         name: t?.name ?? `Território ${tid}`,
         regionName: t?.regionName ?? '',
+        ...(storedIdentifiers.length > 0 ? { assignedSegmentIds: storedIdentifiers } : {}),
+        ...(chosenCodes.length > 0 ? { assignedSegmentCodes: chosenCodes } : {}),
       }
     })
 
     setSavingMode(targetStatus)
     setErrorBanner('')
     try {
+      // Materialize inferred segments into Firestore `segments` collection if not yet registered
+      for (const tid of effectiveTerritoryIds) {
+        const regSegs = segmentsByTerritoryId.get(tid) ?? []
+        const effSegs = effectiveSegmentsByTerritoryId.get(tid) ?? []
+        if (regSegs.length === 0 && effSegs.length > 0) {
+          await saveTerritorySegments(
+            tid,
+            effSegs.map((s) => ({
+              description: s.code,
+              status: s.status === 'completed' ? 'completed' : 'pending',
+              lastWorkedIsoDate: s.lastWorkedIsoDate,
+            })),
+          )
+        }
+      }
+
       await saveAssignment({
         id: activeSlot.savedAssignment?.id,
         isoDate: selectedIsoDate,
@@ -742,6 +1176,7 @@ export function AssignmentsTab({
         conductorNames,
         territoryIds: effectiveTerritoryIds,
         territorySnapshots: snapshots,
+        assignedSegmentsByTerritory: cleanAssignedSegmentsMap,
         notes,
       })
       setSelectedTerritoryIds(effectiveTerritoryIds)
@@ -934,52 +1369,60 @@ export function AssignmentsTab({
               ) : null}
             </div>
 
-            {/* Multiple Departures on Same Day Switcher */}
-            {daySlots.length > 1 || canManage ? (
-              <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                {daySlots.map((slot, idx) => {
-                  const active = idx === safeSlotIndex
-                  return (
-                    <button
-                      key={slot.slotKey}
-                      type="button"
-                      onClick={() => setSelectedSlotIndex(idx)}
-                      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
-                        active
-                          ? 'border-indigo bg-[#EEF2FF] text-indigo'
-                          : 'border-line bg-[#F8FAFC] text-[#475569] hover:text-ink'
-                      }`}
-                    >
-                      {slot.savedAssignment?.status === 'assigned' ? (
-                        <CheckCircle2 size={12} className="text-[#16A34A]" />
-                      ) : slot.savedAssignment?.status === 'draft' ? (
-                        <Clock size={12} className="text-indigo" />
-                      ) : null}
-                      <span>
-                        {slot.startTime} • {slot.locationName || 'Saída manual'}
-                      </span>
-                    </button>
-                  )
-                })}
-
-                {canManage ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextCount = (extraManualSlots[selectedIsoDate] ?? 0) + 1
-                      setExtraManualSlots((curr) => ({
-                        ...curr,
-                        [selectedIsoDate]: nextCount,
-                      }))
-                      setSelectedSlotIndex(daySlots.length)
-                    }}
-                    className="inline-flex items-center gap-1 rounded-lg border border-dashed border-line px-2.5 py-1 text-xs font-medium text-muted hover:border-indigo hover:text-indigo"
-                    title="Planejar mais uma saída neste mesmo dia"
-                  >
-                    <Plus size={12} />
-                    Outra saída
-                  </button>
+            {/* Multiple Departures on Same Day Switcher (or Group Selector on Sundays) */}
+            {daySlots.length > 1 || weekdayKeyFromIso(selectedIsoDate) === 'sunday' || canManage ? (
+              <div className="mt-3 space-y-1.5">
+                {weekdayKeyFromIso(selectedIsoDate) === 'sunday' ? (
+                  <span className="block text-[11px] font-semibold text-muted">
+                    Selecione o grupo para definir a saída e os territórios:
+                  </span>
                 ) : null}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {daySlots.map((slot, idx) => {
+                    const active = idx === safeSlotIndex
+                    const labelText = slot.groupName
+                      ? `${slot.groupName}${slot.territoryIds.length > 0 ? ` (${slot.territoryIds.length})` : ''}`
+                      : `${slot.startTime} • ${slot.locationName || 'Saída manual'}`
+                    return (
+                      <button
+                        key={slot.slotKey}
+                        type="button"
+                        onClick={() => setSelectedSlotIndex(idx)}
+                        className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
+                          active
+                            ? 'border-indigo bg-[#EEF2FF] text-indigo font-semibold'
+                            : 'border-line bg-[#F8FAFC] text-[#475569] hover:text-ink'
+                        }`}
+                      >
+                        {slot.savedAssignment?.status === 'assigned' ? (
+                          <CheckCircle2 size={12} className="text-[#16A34A]" />
+                        ) : slot.savedAssignment?.status === 'draft' ? (
+                          <Clock size={12} className="text-indigo" />
+                        ) : null}
+                        <span>{labelText}</span>
+                      </button>
+                    )
+                  })}
+
+                  {canManage ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextCount = (extraManualSlots[selectedIsoDate] ?? 0) + 1
+                        setExtraManualSlots((curr) => ({
+                          ...curr,
+                          [selectedIsoDate]: nextCount,
+                        }))
+                        setSelectedSlotIndex(daySlots.length)
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg border border-dashed border-line px-2.5 py-1 text-xs font-medium text-muted hover:border-indigo hover:text-indigo"
+                      title="Planejar mais uma saída neste mesmo dia"
+                    >
+                      <Plus size={12} />
+                      Outra saída
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ) : null}
 
@@ -1123,18 +1566,42 @@ export function AssignmentsTab({
                     value={groupName}
                     onChange={(e) => {
                       const val = e.target.value
+                      const targetSlotIdx = daySlots.findIndex(
+                        (s) =>
+                          (s.groupName ?? '').trim().toLowerCase() === val.trim().toLowerCase(),
+                      )
+                      if (targetSlotIdx >= 0 && targetSlotIdx !== safeSlotIndex && !isDirty) {
+                        setSelectedSlotIndex(targetSlotIdx)
+                        return
+                      }
                       setGroupName(val)
                       const g = sundayGroups.find((x) => x.name === val)
                       setGroupId(g?.id ?? null)
+                      const matchingRec = recurringDepartures.find(
+                        (r) =>
+                          r.dayOfWeek === 'sunday' &&
+                          (r.sundayGroupId === g?.id ||
+                            (r.sundayGroupName ?? '').trim().toLowerCase() ===
+                              val.trim().toLowerCase()),
+                      )
+                      if (matchingRec) {
+                        setPreachingSessionId(matchingRec.id)
+                        setMeetingLocationId(matchingRec.meetingLocationId)
+                        setLocationName(matchingRec.locationName)
+                        setStartTime(matchingRec.startTime)
+                      }
                       const groupConductors = getDefaultConductorsFor({
+                        preachingSessionId: matchingRec?.id ?? null,
                         groupId: g?.id ?? null,
                         groupName: val,
                         dayOfWeek: 'sunday',
-                        meetingLocationId,
-                        locationName,
+                        meetingLocationId: matchingRec?.meetingLocationId ?? meetingLocationId,
+                        locationName: matchingRec?.locationName ?? locationName,
                       })
                       if (groupConductors.length > 0) {
                         setConductorNames(groupConductors)
+                      } else if (g?.superintendentName) {
+                        setConductorNames([g.superintendentName])
                       }
                       setIsDirty(true)
                     }}
@@ -1204,39 +1671,307 @@ export function AssignmentsTab({
                   Nenhum território escolhido ainda. Clique em "Usar esta sugestão" ou selecione manualmente abaixo.
                 </p>
               ) : (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {selectedTerritoryObjects.map((t) => (
-                    <span
-                      key={t.id}
-                      className="inline-flex items-center gap-1 rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-2.5 py-0.5 text-xs font-semibold text-[#4338CA]"
-                    >
-                      {t.code}
-                      <span className="font-normal text-[#6366F1]">
-                        ({t.regionName})
-                      </span>
-                      {t.imageUrl ? (
-                        <button
-                          type="button"
-                          onClick={() => setPreviewMapTerritory(t)}
-                          title={`Ver mapa de ${t.code}`}
-                          className="ml-0.5 rounded-full p-0.5 text-indigo hover:bg-[#E0E7FF]"
-                          aria-label={`Ver mapa do território ${t.code}`}
-                        >
-                          <ImageIcon size={12} />
-                        </button>
-                      ) : null}
-                      {canManage ? (
-                        <button
-                          type="button"
-                          onClick={() => toggleTerritoryManual(t.id)}
-                          className="ml-0.5 rounded-full p-0.5 hover:bg-[#E0E7FF]"
-                          aria-label={`Remover território ${t.code}`}
-                        >
-                          <X size={11} />
-                        </button>
-                      ) : null}
-                    </span>
-                  ))}
+                <div className="mt-2 space-y-2">
+                  {selectedTerritoryObjects.map((t) => {
+                    const effSegs = effectiveSegmentsByTerritoryId.get(t.id) ?? []
+                    const chosenSegs = resolveChosenSegmentsForTerritory(
+                      t.id,
+                      assignedSegmentsByTerritory[t.id],
+                    )
+                    const chosenIdSet = new Set(chosenSegs.map((s) => s.id))
+                    const isSubsetChosen =
+                      effSegs.length > 0 &&
+                      chosenSegs.length > 0 &&
+                      chosenSegs.length < effSegs.length
+                    const missingSegs = effSegs.filter(
+                      (s) => s.isMissingInCycle || s.status !== 'completed',
+                    )
+                    const hasSomeCompletedAndSomeMissing =
+                      effSegs.length > 0 &&
+                      missingSegs.length > 0 &&
+                      missingSegs.length < effSegs.length
+                    const isDesignatedSaved =
+                      activeSlot.savedAssignment?.status === 'assigned'
+                    const execDoneIds = execDoneSegmentsByTerritory[t.id] ?? []
+                    const execDoneSet = new Set(execDoneIds)
+                    const baseNum = t.baseNumber || t.code
+
+                    return (
+                      <div
+                        key={t.id}
+                        className="rounded-xl border border-[#C7D2FE] bg-[#F8FAFC] p-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-2.5 py-0.5 text-xs font-bold text-[#4338CA]">
+                              {t.code}
+                              <span className="font-normal text-[#6366F1]">
+                                ({t.regionName})
+                              </span>
+                            </span>
+                            {isSubsetChosen ? (
+                              <span className="rounded-full border border-[#93C5FD] bg-[#DBEAFE] px-2 py-0.5 text-[10px] font-bold text-[#1E40AF]">
+                                Designando: {chosenSegs.map((s) => s.code).join(', ')}
+                              </span>
+                            ) : null}
+                            {isDesignatedSaved ? (
+                              <span className="rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#166534]">
+                                Designado
+                              </span>
+                            ) : null}
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            {t.imageUrl ? (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewMapTerritory(t)}
+                                title={`Ver mapa de ${t.code}`}
+                                className="inline-flex items-center gap-1 rounded-lg border border-line bg-white px-2 py-1 text-[11px] font-medium text-indigo hover:bg-[#EEF2FF]"
+                              >
+                                <ImageIcon size={12} />
+                                Mapa
+                              </button>
+                            ) : null}
+                            {canManage ? (
+                              <button
+                                type="button"
+                                onClick={() => toggleTerritoryManual(t.id)}
+                                className="rounded-lg p-1 text-muted hover:bg-[#FEE2E2] hover:text-[#DC2626]"
+                                aria-label={`Remover território ${t.code}`}
+                              >
+                                <X size={13} />
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        {/* Segment selector for designation */}
+                        {effSegs.length > 0 ? (
+                          <div className="mt-2.5 border-t border-line pt-2">
+                            <div className="flex flex-wrap items-center justify-between gap-1.5">
+                              <span className="text-[11px] font-semibold text-[#475569]">
+                                Segmentos para designar nesta saída:
+                              </span>
+                              {canManage ? (
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {hasSomeCompletedAndSomeMissing ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => selectMissingSegmentsOnly(t.id)}
+                                      className="rounded-md border border-[#93C5FD] bg-[#EFF6FF] px-2 py-0.5 text-[10px] font-bold text-[#1E40AF] transition hover:bg-[#DBEAFE]"
+                                      title="Selecionar apenas os segmentos que faltam concluir"
+                                    >
+                                      Só o que falta ({missingSegs.map((s) => s.code).join(', ')})
+                                    </button>
+                                  ) : null}
+                                  {isSubsetChosen ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => selectAllTerritorySegments(t.id)}
+                                      className="rounded-md border border-line bg-white px-2 py-0.5 text-[10px] font-medium text-[#475569] transition hover:border-[#C7D2FE] hover:text-indigo"
+                                    >
+                                      Território inteiro
+                                    </button>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
+
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {effSegs.map((seg) => {
+                                const isChosen = chosenIdSet.has(seg.id)
+                                return (
+                                  <button
+                                    key={seg.id}
+                                    type="button"
+                                    disabled={!canManage}
+                                    onClick={() => toggleAssignedSegment(t.id, seg)}
+                                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
+                                      isChosen
+                                        ? 'border-indigo bg-indigo text-white shadow-2xs'
+                                        : 'border-line bg-white text-[#475569] hover:border-[#C7D2FE]'
+                                    }`}
+                                  >
+                                    <span>{seg.code}</span>
+                                    {seg.isMissingInCycle ? (
+                                      <span
+                                        className={`rounded px-1 text-[9px] font-bold ${
+                                          isChosen
+                                            ? 'bg-[#FEF08A] text-[#854D0E]'
+                                            : 'bg-[#DBEAFE] text-[#1E40AF]'
+                                        }`}
+                                      >
+                                        falta
+                                      </span>
+                                    ) : seg.status === 'partial' ? (
+                                      <span
+                                        className={`rounded px-1 text-[9px] font-bold ${
+                                          isChosen
+                                            ? 'bg-white/25 text-white'
+                                            : 'bg-[#FEF3C7] text-[#92400E]'
+                                        }`}
+                                      >
+                                        parcial
+                                      </span>
+                                    ) : seg.status === 'completed' ? (
+                                      <span
+                                        className={`rounded px-1 text-[9px] ${
+                                          isChosen
+                                            ? 'bg-white/20 text-white'
+                                            : 'bg-[#DCFCE7] text-[#166534]'
+                                        }`}
+                                      >
+                                        feito
+                                        {seg.lastWorkedIsoDate
+                                          ? ` ${formatShortDayMonth(seg.lastWorkedIsoDate)}`
+                                          : ''}
+                                      </span>
+                                    ) : null}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        ) : canManage ? (
+                          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2">
+                            <span className="text-[11px] text-muted">
+                              Designar segmento específico:
+                            </span>
+                            <div className="flex flex-wrap items-center gap-1">
+                              <button
+                                type="button"
+                                disabled={splittingTerritoryId === t.id}
+                                onClick={() =>
+                                  void handleQuickSplitForDesignation(t, 2, [`${baseNum}A`])
+                                }
+                                className="rounded-lg border border-line bg-white px-2 py-0.5 text-[11px] font-semibold text-[#475569] transition hover:border-indigo hover:text-indigo disabled:opacity-50"
+                                title={`Dividir em ${baseNum}A e ${baseNum}B e designar apenas ${baseNum}A`}
+                              >
+                                Apenas {baseNum}A
+                              </button>
+                              <button
+                                type="button"
+                                disabled={splittingTerritoryId === t.id}
+                                onClick={() =>
+                                  void handleQuickSplitForDesignation(t, 2, [`${baseNum}B`])
+                                }
+                                className="rounded-lg border border-line bg-white px-2 py-0.5 text-[11px] font-semibold text-[#475569] transition hover:border-indigo hover:text-indigo disabled:opacity-50"
+                                title={`Dividir em ${baseNum}A e ${baseNum}B e designar apenas ${baseNum}B`}
+                              >
+                                Apenas {baseNum}B
+                              </button>
+                              <button
+                                type="button"
+                                disabled={splittingTerritoryId === t.id}
+                                onClick={() =>
+                                  void handleQuickSplitForDesignation(t, 3)
+                                }
+                                className="rounded-lg border border-dashed border-[#C7D2FE] bg-white px-2 py-0.5 text-[11px] font-semibold text-indigo transition hover:bg-[#EEF2FF] disabled:opacity-50"
+                                title={`Dividir o território ${t.code} em ${baseNum}A, ${baseNum}B e ${baseNum}C`}
+                              >
+                                + Dividir A/B/C
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {/* Conductor / Admin Day Execution Checklist (shown once departure is saved as Designada) */}
+                        {isDesignatedSaved ? (
+                          <div className="mt-3 rounded-xl border border-line bg-white p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-[11px] font-bold text-ink">
+                                Retorno do dirigente — O que foi feito neste dia:
+                              </span>
+                              <label className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-[#1E40AF]">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(execPartialFlagByTerritory[t.id])}
+                                  onChange={(e) =>
+                                    setExecPartialFlagByTerritory((prev) => ({
+                                      ...prev,
+                                      [t.id]: e.target.checked,
+                                    }))
+                                  }
+                                  className="h-3.5 w-3.5 accent-indigo"
+                                />
+                                Feito pela metade / parcial
+                              </label>
+                            </div>
+
+                            {effSegs.length > 0 ? (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {effSegs.map((seg) => {
+                                  const isDone =
+                                    execDoneSet.has(seg.id) || execDoneSet.has(seg.code)
+                                  const wasAssignedToday = chosenIdSet.has(seg.id)
+                                  return (
+                                    <label
+                                      key={seg.id}
+                                      className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
+                                        isDone
+                                          ? 'border-[#86EFAC] bg-[#DCFCE7] text-[#166534]'
+                                          : wasAssignedToday
+                                            ? 'border-[#C7D2FE] bg-[#EEF2FF]/60 text-ink'
+                                            : 'border-line bg-[#F8FAFC] text-muted'
+                                      }`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={isDone}
+                                        onChange={(e) => {
+                                          const checked = e.target.checked
+                                          setExecDoneSegmentsByTerritory((prev) => {
+                                            const list = prev[t.id] ?? []
+                                            return {
+                                              ...prev,
+                                              [t.id]: checked
+                                                ? [...new Set([...list, seg.id])]
+                                                : list.filter(
+                                                    (id) => id !== seg.id && id !== seg.code,
+                                                  ),
+                                            }
+                                          })
+                                        }}
+                                        className="h-3.5 w-3.5 accent-[#16A34A]"
+                                      />
+                                      <span>{seg.code}</span>
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                            ) : null}
+
+                            <div className="mt-2.5 flex flex-col gap-2 sm:flex-row">
+                              <input
+                                type="text"
+                                value={execCommentByTerritory[t.id] ?? ''}
+                                onChange={(e) =>
+                                  setExecCommentByTerritory((prev) => ({
+                                    ...prev,
+                                    [t.id]: e.target.value,
+                                  }))
+                                }
+                                placeholder={`Comentário (ex.: fizemos ${t.code}A e ${t.code}B; ${t.code}B ficou pela metade)`}
+                                className="h-8 flex-1 rounded-lg border border-line bg-[#F8FAFC] px-2.5 text-xs text-ink outline-none focus:border-indigo focus:bg-white"
+                              />
+                              <button
+                                type="button"
+                                disabled={savingExecutionTerritoryId === t.id}
+                                onClick={() => void handleRecordExecutionForTerritory(t)}
+                                className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg bg-[#16A34A] px-3 text-xs font-semibold text-white hover:bg-[#15803D] disabled:opacity-50"
+                              >
+                                <Check size={13} />
+                                {savingExecutionTerritoryId === t.id
+                                  ? 'Salvando...'
+                                  : 'Confirmar feito'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -1268,33 +2003,167 @@ export function AssignmentsTab({
               </p>
             ) : (
               <div className="space-y-3">
-                {availableByRegion.map(([regionName, items]) => (
-                  <div
-                    key={regionName}
-                    className="rounded-xl border border-line/70 bg-[#F8FAFC] p-3.5"
-                  >
-                    <h4 className="mb-2.5 text-xs font-bold text-ink">
-                      {regionName} ({items.length})
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {items.map((territory) => {
-                        const snap = statusesById.get(territory.id)
-                        const isSelected = selectedTerritoryIds.includes(territory.id)
-                        return (
-                          <TerritoryPill
-                            key={territory.id}
-                            code={territory.code}
-                            status={snap?.status ?? 'available'}
-                            snapshot={snap}
-                            selected={isSelected}
-                            disabled={!canManage}
-                            onClick={() => toggleTerritoryManual(territory.id)}
-                          />
-                        )
-                      })}
+                {availableByRegion.map(([regionName, items]) => {
+                  const selectedInRegion = items.filter((item) =>
+                    selectedTerritoryIds.includes(item.id),
+                  )
+                  return (
+                    <div
+                      key={regionName}
+                      className="rounded-xl border border-line/70 bg-[#F8FAFC] p-3.5"
+                    >
+                      <h4 className="mb-2.5 text-xs font-bold text-ink">
+                        {regionName} ({items.length})
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {items.map((territory) => {
+                          const snap = statusesById.get(territory.id)
+                          const isSelected = selectedTerritoryIds.includes(territory.id)
+                          return (
+                            <TerritoryPill
+                              key={territory.id}
+                              code={territory.code}
+                              status={snap?.status ?? 'available'}
+                              snapshot={snap}
+                              selected={isSelected}
+                              disabled={!canManage}
+                              onClick={() => toggleTerritoryManual(territory.id)}
+                            />
+                          )
+                        })}
+                      </div>
+
+                      {/* Inline segment picker right inside the region card for selected territories */}
+                      {selectedInRegion.length > 0 ? (
+                        <div className="mt-3 space-y-2 border-t border-line/80 pt-2.5">
+                          <span className="block text-[11px] font-semibold text-[#475569]">
+                            Segmentos dos territórios selecionados em {regionName}:
+                          </span>
+                          {selectedInRegion.map((t) => {
+                            const effSegs = effectiveSegmentsByTerritoryId.get(t.id) ?? []
+                            const chosenSegs = resolveChosenSegmentsForTerritory(
+                              t.id,
+                              assignedSegmentsByTerritory[t.id],
+                            )
+                            const chosenIdSet = new Set(chosenSegs.map((s) => s.id))
+                            const missingSegs = effSegs.filter(
+                              (s) => s.isMissingInCycle || s.status !== 'completed',
+                            )
+                            const hasSomeCompletedAndSomeMissing =
+                              effSegs.length > 0 &&
+                              missingSegs.length > 0 &&
+                              missingSegs.length < effSegs.length
+                            const baseNum = t.baseNumber || t.code
+
+                            return (
+                              <div
+                                key={t.id}
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#C7D2FE] bg-white px-2.5 py-1.5"
+                              >
+                                <span className="text-xs font-bold text-[#4338CA]">
+                                  Terr. {t.code}:
+                                </span>
+                                {effSegs.length > 0 ? (
+                                  <div className="flex flex-wrap items-center gap-1">
+                                    {effSegs.map((seg) => {
+                                      const isChosen = chosenIdSet.has(seg.id)
+                                      return (
+                                        <button
+                                          key={seg.id}
+                                          type="button"
+                                          disabled={!canManage}
+                                          onClick={() => toggleAssignedSegment(t.id, seg)}
+                                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-semibold transition ${
+                                            isChosen
+                                              ? 'border-indigo bg-indigo text-white'
+                                              : 'border-line bg-[#F8FAFC] text-[#475569] hover:border-[#C7D2FE]'
+                                          }`}
+                                        >
+                                          <span>{seg.code}</span>
+                                          {seg.isMissingInCycle ? (
+                                            <span
+                                              className={`rounded px-1 text-[9px] font-bold ${
+                                                isChosen
+                                                  ? 'bg-[#FEF08A] text-[#854D0E]'
+                                                  : 'bg-[#DBEAFE] text-[#1E40AF]'
+                                              }`}
+                                            >
+                                              falta
+                                            </span>
+                                          ) : seg.status === 'completed' ? (
+                                            <span
+                                              className={`rounded px-1 text-[9px] ${
+                                                isChosen
+                                                  ? 'bg-white/20 text-white'
+                                                  : 'bg-[#DCFCE7] text-[#166534]'
+                                              }`}
+                                            >
+                                              feito
+                                            </span>
+                                          ) : null}
+                                        </button>
+                                      )
+                                    })}
+                                    {canManage && hasSomeCompletedAndSomeMissing ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => selectMissingSegmentsOnly(t.id)}
+                                        className="ml-1 rounded-md border border-[#93C5FD] bg-[#EFF6FF] px-2 py-0.5 text-[10px] font-bold text-[#1E40AF] hover:bg-[#DBEAFE]"
+                                      >
+                                        Só o que falta
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                ) : canManage ? (
+                                  <div className="flex flex-wrap items-center gap-1">
+                                    <button
+                                      type="button"
+                                      disabled={splittingTerritoryId === t.id}
+                                      onClick={() =>
+                                        void handleQuickSplitForDesignation(t, 2, [
+                                          `${baseNum}A`,
+                                        ])
+                                      }
+                                      className="rounded-md border border-line bg-[#F8FAFC] px-2 py-0.5 text-[11px] font-semibold text-[#475569] hover:border-indigo hover:text-indigo"
+                                    >
+                                      Apenas {baseNum}A
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={splittingTerritoryId === t.id}
+                                      onClick={() =>
+                                        void handleQuickSplitForDesignation(t, 2, [
+                                          `${baseNum}B`,
+                                        ])
+                                      }
+                                      className="rounded-md border border-line bg-[#F8FAFC] px-2 py-0.5 text-[11px] font-semibold text-[#475569] hover:border-indigo hover:text-indigo"
+                                    >
+                                      Apenas {baseNum}B
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={splittingTerritoryId === t.id}
+                                      onClick={() =>
+                                        void handleQuickSplitForDesignation(t, 3)
+                                      }
+                                      className="rounded-md border border-dashed border-[#C7D2FE] bg-white px-2 py-0.5 text-[11px] font-semibold text-indigo hover:bg-[#EEF2FF]"
+                                    >
+                                      + A/B/C
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-[11px] text-muted">
+                                    Território completo
+                                  </span>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : null}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
@@ -1357,7 +2226,11 @@ export function AssignmentsTab({
                   <span className="text-sm font-bold text-[#14532D]">
                     Sugestão:{' '}
                     {formatPortugueseList(
-                      suggestion.recommended.map((r) => r.territory.code),
+                      suggestion.recommended.map((r) =>
+                        r.recommendedSegmentCodes && r.recommendedSegmentCodes.length > 0
+                          ? r.recommendedSegmentCodes.join(', ')
+                          : r.territory.code,
+                      ),
                     )}
                   </span>
                 </div>

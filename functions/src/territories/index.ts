@@ -204,3 +204,117 @@ export const importTerritoryHistory = functions.https.onCall(
     }
   },
 )
+
+export const clearTerritoryHistory = functions.https.onCall(
+  async (
+    data: {
+      congregationId?: unknown
+      clearWorkSessions?: unknown
+      clearAssignments?: unknown
+      resetSegments?: unknown
+      workSessionIds?: unknown
+      assignmentIds?: unknown
+    } | null,
+    context,
+  ) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "É preciso entrar na conta.")
+    }
+
+    const callerUid = context.auth.uid
+    const db = admin.firestore()
+    const userSnap = await db.collection("users").doc(callerUid).get()
+    const profile = (userSnap.data() as CallerProfile | undefined) ?? null
+    const callerCongregationId =
+      typeof profile?.congregationId === "string" ? profile.congregationId.trim() : ""
+
+    if (!callerCongregationId || !canManageTerritories(profile)) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Você não tem permissão para limpar o histórico de territórios desta congregação.",
+      )
+    }
+
+    const requestedCongregationId =
+      typeof data?.congregationId === "string" ? data.congregationId.trim() : ""
+    if (requestedCongregationId && requestedCongregationId !== callerCongregationId) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "A congregação informada não corresponde ao perfil do usuário autenticado.",
+      )
+    }
+
+    const clearWorkSessions = data?.clearWorkSessions !== false
+    const clearAssignments = data?.clearAssignments === true
+    const resetSegments = data?.resetSegments === true
+
+    const specificWsIds = Array.isArray(data?.workSessionIds)
+      ? new Set(data!.workSessionIds.filter((id): id is string => typeof id === "string"))
+      : null
+    const specificAssignIds = Array.isArray(data?.assignmentIds)
+      ? new Set(data!.assignmentIds.filter((id): id is string => typeof id === "string"))
+      : null
+
+    const refsToDelete: FirebaseFirestore.DocumentReference[] = []
+    const refsToResetSegment: FirebaseFirestore.DocumentReference[] = []
+
+    if (clearWorkSessions) {
+      const wsSnap = await db
+        .collection(WORK_SESSIONS)
+        .where("congregationId", "==", callerCongregationId)
+        .get()
+      for (const docSnap of wsSnap.docs) {
+        if (!specificWsIds || specificWsIds.has(docSnap.id)) {
+          refsToDelete.push(docSnap.ref)
+        }
+      }
+    }
+
+    if (clearAssignments) {
+      const assignSnap = await db
+        .collection("assignments")
+        .where("congregationId", "==", callerCongregationId)
+        .get()
+      for (const docSnap of assignSnap.docs) {
+        if (!specificAssignIds || specificAssignIds.has(docSnap.id)) {
+          refsToDelete.push(docSnap.ref)
+        }
+      }
+    }
+
+    if (resetSegments) {
+      const segSnap = await db
+        .collection("segments")
+        .where("congregationId", "==", callerCongregationId)
+        .get()
+      for (const docSnap of segSnap.docs) {
+        refsToResetSegment.push(docSnap.ref)
+      }
+    }
+
+    const chunkSize = 400
+    for (let i = 0; i < refsToDelete.length; i += chunkSize) {
+      const batch = db.batch()
+      for (const ref of refsToDelete.slice(i, i + chunkSize)) {
+        batch.delete(ref)
+      }
+      await batch.commit()
+    }
+
+    for (let i = 0; i < refsToResetSegment.length; i += chunkSize) {
+      const batch = db.batch()
+      for (const ref of refsToResetSegment.slice(i, i + chunkSize)) {
+        batch.update(ref, {
+          status: "pending",
+          lastWorkedDate: admin.firestore.FieldValue.delete(),
+        })
+      }
+      await batch.commit()
+    }
+
+    return {
+      deletedCount: refsToDelete.length,
+      segmentsResetCount: refsToResetSegment.length,
+    }
+  },
+)

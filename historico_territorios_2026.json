@@ -60,19 +60,19 @@
         },
         {
           "date": "2026-07-12",
-          "conductor": "Laucy",
-          "territories": [
-            "11B"
-          ],
-          "raw": "12.07 - Laucy - 11B"
-        },
-        {
-          "date": "2026-07-12",
           "conductor": "Damião",
           "territories": [
             "09 B(parte)"
           ],
           "raw": "12.07 - Damião - 09 B(parte)"
+        },
+        {
+          "date": "2026-07-12",
+          "conductor": "Laucy",
+          "territories": [
+            "11B"
+          ],
+          "raw": "12.07 - Laucy - 11B"
         },
         {
           "date": "2026-07-12",
@@ -118,19 +118,19 @@
         },
         {
           "date": "2026-07-19",
-          "conductor": "Roberto",
-          "territories": [
-            "09A"
-          ],
-          "raw": "19.07 - Roberto - 09A"
-        },
-        {
-          "date": "2026-07-19",
           "conductor": "José Ferreira",
           "territories": [
             "08B"
           ],
           "raw": "19.07 - José Ferreira - 08B"
+        },
+        {
+          "date": "2026-07-19",
+          "conductor": "Roberto",
+          "territories": [
+            "09A"
+          ],
+          "raw": "19.07 - Roberto - 09A"
         },
         {
           "date": "2026-07-24",
@@ -142,19 +142,19 @@
         },
         {
           "date": "2026-07-26",
-          "conductor": "Roberto",
-          "territories": [
-            "09B"
-          ],
-          "raw": "26.07 - Roberto - 09B"
-        },
-        {
-          "date": "2026-07-26",
           "conductor": "Damião",
           "territories": [
             "11"
           ],
           "raw": "26.07 - Damião - 11"
+        },
+        {
+          "date": "2026-07-26",
+          "conductor": "Roberto",
+          "territories": [
+            "09B"
+          ],
+          "raw": "26.07 - Roberto - 09B"
         },
         {
           "date": "2026-07-29",
@@ -182,21 +182,21 @@
         },
         {
           "date": "2026-08-06",
-          "conductor": "Mike",
-          "territories": [
-            "30",
-            "32"
-          ],
-          "raw": "06.08 - Mike - 30;32"
-        },
-        {
-          "date": "2026-08-06",
           "conductor": "Mike (Tarde)",
           "territories": [
             "13",
             "14"
           ],
           "raw": "06.08 - Mike (Tarde) - 13;14"
+        },
+        {
+          "date": "2026-08-06",
+          "conductor": "Mike",
+          "territories": [
+            "30",
+            "32"
+          ],
+          "raw": "06.08 - Mike - 30;32"
         },
         {
           "date": "2026-08-09",
@@ -227,19 +227,19 @@
         },
         {
           "date": "2026-08-16",
-          "conductor": "Júlio César",
-          "territories": [
-            "24"
-          ],
-          "raw": "16.08 - Júlio César - 24"
-        },
-        {
-          "date": "2026-08-16",
           "conductor": "João Aristeu",
           "territories": [
             "12"
           ],
           "raw": "16.08 - João Aristeu - 12"
+        },
+        {
+          "date": "2026-08-16",
+          "conductor": "Júlio César",
+          "territories": [
+            "24"
+          ],
+          "raw": "16.08 - Júlio César - 24"
         },
         {
           "date": "2026-08-21",
@@ -248,14 +248,6 @@
             "24"
           ],
           "raw": "21.08 - Marcos - 24"
-        },
-        {
-          "date": "2026-08-23",
-          "conductor": "Roberto",
-          "territories": [
-            "29 Incompleto"
-          ],
-          "raw": "23.08 - Roberto - 29 Incompleto"
         },
         {
           "date": "2026-08-23",
@@ -281,6 +273,14 @@
             "26B"
           ],
           "raw": "23.08 - Julio Cesar - 26A;26B"
+        },
+        {
+          "date": "2026-08-23",
+          "conductor": "Roberto",
+          "territories": [
+            "29 Incompleto"
+          ],
+          "raw": "23.08 - Roberto - 29 Incompleto"
         },
         {
           "date": "2026-08-25",
@@ -318,19 +318,19 @@
         },
         {
           "date": "2026-08-30",
-          "conductor": "Roberto",
-          "territories": [
-            "29 Incompleto"
-          ],
-          "raw": "30.08 - Roberto - 29 Incompleto"
-        },
-        {
-          "date": "2026-08-30",
           "conductor": "Júlio",
           "territories": [
             "30A"
           ],
           "raw": "30.08 - Júlio - 30A"
+        },
+        {
+          "date": "2026-08-30",
+          "conductor": "Roberto",
+          "territories": [
+            "29 Incompleto"
+          ],
+          "raw": "30.08 - Roberto - 29 Incompleto"
         },
         {
           "date": "2026-09-01",
@@ -460,20 +460,20 @@
         },
         {
           "date": "2026-10-18",
-          "conductor": "Gp Maria A.P - Roberto",
-          "territories": [
-            "30B"
-          ],
-          "raw": "18.10 - Gp Maria A.P - Roberto - 30B"
-        },
-        {
-          "date": "2026-10-18",
           "conductor": "Gp Guaíba - Bessa",
           "territories": [
             "06A",
             "06B"
           ],
           "raw": "18.10 - Gp Guaíba - Bessa - 06A;06B"
+        },
+        {
+          "date": "2026-10-18",
+          "conductor": "Gp Maria A.P - Roberto",
+          "territories": [
+            "30B"
+          ],
+          "raw": "18.10 - Gp Maria A.P - Roberto - 30B"
         },
         {
           "date": "2026-10-18",
@@ -501,19 +501,19 @@
         },
         {
           "date": "2026-11-01",
-          "conductor": "Marcos",
-          "territories": [
-            "29B"
-          ],
-          "raw": "01.11 - Marcos - 29B"
-        },
-        {
-          "date": "2026-11-01",
           "conductor": "João Aristeu",
           "territories": [
             "12B"
           ],
           "raw": "01.11 - João Aristeu - 12B"
+        },
+        {
+          "date": "2026-11-01",
+          "conductor": "Marcos",
+          "territories": [
+            "29B"
+          ],
+          "raw": "01.11 - Marcos - 29B"
         },
         {
           "date": "2026-11-03",
@@ -540,6 +540,54 @@
             "11C"
           ],
           "raw": "06.11 - Marcos - 11B;11C"
+        },
+        {
+          "date": "2026-11-08",
+          "conductor": "Gusmão",
+          "territories": [
+            "12A"
+          ],
+          "raw": "08.11 - Gusmão - 12A"
+        },
+        {
+          "date": "2026-11-08",
+          "conductor": "Júlio César",
+          "territories": [
+            "13"
+          ],
+          "raw": "08.11 - Júlio César - 13"
+        },
+        {
+          "date": "2026-11-08",
+          "conductor": "Roberto",
+          "territories": [
+            "29A"
+          ],
+          "raw": "08.11 - Roberto - 29A"
+        },
+        {
+          "date": "2026-11-13",
+          "conductor": "Marcos",
+          "territories": [
+            "11A"
+          ],
+          "raw": "13.11 - Marcos - 11A"
+        },
+        {
+          "date": "2026-11-15",
+          "conductor": "Júlio César",
+          "territories": [
+            "10"
+          ],
+          "raw": "15.11 - Júlio César - 10"
+        },
+        {
+          "date": "2026-11-15",
+          "conductor": "Marcos",
+          "territories": [
+            "32"
+          ],
+          "raw": "15.11 - Marcos - 32"
         }
       ]
     },
@@ -572,19 +620,19 @@
         },
         {
           "date": "2026-07-05",
-          "conductor": "Marcelo",
-          "territories": [
-            "5A"
-          ],
-          "raw": "05.07 - Marcelo - 5A"
-        },
-        {
-          "date": "2026-07-05",
           "conductor": "João Aristeu",
           "territories": [
             "08A"
           ],
           "raw": "05.07 - João Aristeu - 08A"
+        },
+        {
+          "date": "2026-07-05",
+          "conductor": "Marcelo",
+          "territories": [
+            "5A"
+          ],
+          "raw": "05.07 - Marcelo - 5A"
         },
         {
           "date": "2026-07-07",
@@ -639,19 +687,19 @@
         },
         {
           "date": "2026-07-18",
-          "conductor": "Kelvin",
-          "territories": [
-            "20"
-          ],
-          "raw": "18.07 - Kelvin - 20"
-        },
-        {
-          "date": "2026-07-18",
           "conductor": "Hamilton",
           "territories": [
             "03B"
           ],
           "raw": "18.07 - Hamilton - 03B"
+        },
+        {
+          "date": "2026-07-18",
+          "conductor": "Kelvin",
+          "territories": [
+            "20"
+          ],
+          "raw": "18.07 - Kelvin - 20"
         },
         {
           "date": "2026-07-19",
@@ -696,14 +744,6 @@
         },
         {
           "date": "2026-07-26",
-          "conductor": "Marcelo",
-          "territories": [
-            "03A"
-          ],
-          "raw": "26.07 - Marcelo - 03A"
-        },
-        {
-          "date": "2026-07-26",
           "conductor": "Gusmão",
           "territories": [
             "13"
@@ -711,12 +751,12 @@
           "raw": "26.07 - Gusmão - 13"
         },
         {
-          "date": "2026-07-28",
-          "conductor": "Bessa",
+          "date": "2026-07-26",
+          "conductor": "Marcelo",
           "territories": [
-            "15A"
+            "03A"
           ],
-          "raw": "28.07 - Bessa - 15A"
+          "raw": "26.07 - Marcelo - 03A"
         },
         {
           "date": "2026-07-28",
@@ -725,6 +765,14 @@
             "06A"
           ],
           "raw": "28.07 - Bessa (Tarde) - 06A"
+        },
+        {
+          "date": "2026-07-28",
+          "conductor": "Bessa",
+          "territories": [
+            "15A"
+          ],
+          "raw": "28.07 - Bessa - 15A"
         },
         {
           "date": "2026-07-30",
@@ -762,19 +810,19 @@
         },
         {
           "date": "2026-08-02",
-          "conductor": "João",
-          "territories": [
-            "07B"
-          ],
-          "raw": "02.08 - João - 07B"
-        },
-        {
-          "date": "2026-08-02",
           "conductor": "Ferreirinha",
           "territories": [
             "08A"
           ],
           "raw": "02.08 - Ferreirinha - 08A"
+        },
+        {
+          "date": "2026-08-02",
+          "conductor": "João",
+          "territories": [
+            "07B"
+          ],
+          "raw": "02.08 - João - 07B"
         },
         {
           "date": "2026-08-04",
@@ -911,20 +959,20 @@
         },
         {
           "date": "2026-08-30",
+          "conductor": "Gusmão",
+          "territories": [
+            "17"
+          ],
+          "raw": "30.08 - Gusmão - 17"
+        },
+        {
+          "date": "2026-08-30",
           "conductor": "João Aristeu",
           "territories": [
             "07A",
             "05B"
           ],
           "raw": "30.08 - João Aristeu - 07A;05B"
-        },
-        {
-          "date": "2026-08-30",
-          "conductor": "Gusmão",
-          "territories": [
-            "17"
-          ],
-          "raw": "30.08 - Gusmão - 17"
         },
         {
           "date": "2026-09-01",
@@ -963,20 +1011,20 @@
         },
         {
           "date": "2026-09-08",
+          "conductor": "Carlos Montero (tarde)",
+          "territories": [
+            "14"
+          ],
+          "raw": "08.09 - Carlos Montero (tarde) - 14"
+        },
+        {
+          "date": "2026-09-08",
           "conductor": "Claudino",
           "territories": [
             "18B",
             "18A (parte)"
           ],
           "raw": "08.09 - Claudino - 18B;18A (parte)"
-        },
-        {
-          "date": "2026-09-08",
-          "conductor": "Carlos Montero (tarde)",
-          "territories": [
-            "14"
-          ],
-          "raw": "08.09 - Carlos Montero (tarde) - 14"
         },
         {
           "date": "2026-09-15",
@@ -1014,19 +1062,19 @@
         },
         {
           "date": "2026-09-27",
-          "conductor": "Carlos Montero",
-          "territories": [
-            "21"
-          ],
-          "raw": "27.09 - Carlos Montero - 21"
-        },
-        {
-          "date": "2026-09-27",
           "conductor": "Bessa",
           "territories": [
             "05A"
           ],
           "raw": "27.09 - Bessa - 05A"
+        },
+        {
+          "date": "2026-09-27",
+          "conductor": "Carlos Montero",
+          "territories": [
+            "21"
+          ],
+          "raw": "27.09 - Carlos Montero - 21"
         },
         {
           "date": "2026-09-27",
@@ -1179,6 +1227,89 @@
             "05A"
           ],
           "raw": "04.11 - Carlos Montero - 05A"
+        },
+        {
+          "date": "2026-11-07",
+          "conductor": "Gusmão",
+          "territories": [
+            "07"
+          ],
+          "raw": "07.11 - Gusmão - 07"
+        },
+        {
+          "date": "2026-11-08",
+          "conductor": "Gusmão",
+          "territories": [
+            "05B"
+          ],
+          "raw": "08.11 - Gusmão - 05B"
+        },
+        {
+          "date": "2026-11-08",
+          "conductor": "João Aristeu",
+          "territories": [
+            "08B(parte)"
+          ],
+          "raw": "08.11 - João Aristeu - 08B(parte)"
+        },
+        {
+          "date": "2026-11-08",
+          "conductor": "Marcelo",
+          "territories": [
+            "15",
+            "19C"
+          ],
+          "raw": "08.11 - Marcelo - 15, 19C"
+        },
+        {
+          "date": "2026-11-10",
+          "conductor": "Carlos Alberto",
+          "territories": [
+            "18B"
+          ],
+          "raw": "10.11 - Carlos Alberto - 18B"
+        },
+        {
+          "date": "2026-11-11",
+          "conductor": "Marcelo",
+          "territories": [
+            "01",
+            "02"
+          ],
+          "raw": "11.11 - Marcelo - 01, 02"
+        },
+        {
+          "date": "2026-11-14",
+          "conductor": "Marcos",
+          "territories": [
+            "20"
+          ],
+          "raw": "14.11 - Marcos - 20"
+        },
+        {
+          "date": "2026-11-15",
+          "conductor": "Gusmão",
+          "territories": [
+            "06"
+          ],
+          "raw": "15.11 - Gusmão - 06"
+        },
+        {
+          "date": "2026-11-15",
+          "conductor": "José Soares",
+          "territories": [
+            "21"
+          ],
+          "raw": "15.11 - José Soares - 21"
+        },
+        {
+          "date": "2026-11-15",
+          "conductor": "João Aristeu",
+          "territories": [
+            "08A",
+            "08B"
+          ],
+          "raw": "15.11 - João Aristeu - 08A, B"
         }
       ]
     }
@@ -1188,6 +1319,8 @@
     "Cada linha original é um registro independente; registros no mesmo dia não foram agrupados.",
     "Os códigos e observações dos territórios foram preservados como strings para não perder anotações ou interpretações ambíguas.",
     "O registro Laranjeiras de 17–18/10 foi preservado como intervalo, sem presumir em qual dia cada território foi trabalhado.",
-    "Não foram convertidos nomes de dirigentes em IDs de publicadores; isso deve ocorrer por correspondência na etapa de importação."
-  ]
+    "Não foram convertidos nomes de dirigentes em IDs de publicadores; isso deve ocorrer por correspondência na etapa de importação.",
+    "Atualização recebida em 16/11/2026: acrescentados registros de Guaíba e Laranjeiras de 07/11 a 15/11. Territórios não cadastrados no app permanecem no JSON e devem ser sinalizados como pendentes na importação, nunca descartados."
+  ],
+  "updatedThrough": "2026-11-15"
 }

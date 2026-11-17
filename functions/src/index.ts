@@ -474,4 +474,4 @@ export {
   bulkUpdatePublisherAccounts,
 } from "./publishers";
 
-export { importTerritoryHistory } from "./territories";
+export { importTerritoryHistory, clearTerritoryHistory } from "./territories";

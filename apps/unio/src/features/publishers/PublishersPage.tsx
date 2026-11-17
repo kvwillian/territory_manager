@@ -93,9 +93,17 @@ export function PublishersPage() {
       if (groupId && groupId !== 'none' && publisher.groupId !== groupId) return false
       if (status && publisher.status !== status) return false
       if (gender && publisher.gender !== gender) return false
+      if (privilege === 'special' && publisher.pioneer !== 'special') return false
       if (privilege === 'auxiliary' && publisher.pioneer !== 'auxiliary') return false
       if (privilege === 'regular' && publisher.pioneer !== 'regular') return false
-      if (privilege && privilege !== 'auxiliary' && privilege !== 'regular' && publisher.privilege !== privilege) return false
+      if (
+        privilege &&
+        privilege !== 'special' &&
+        privilege !== 'auxiliary' &&
+        privilege !== 'regular' &&
+        publisher.privilege !== privilege
+      )
+        return false
       return true
     })
   }, [publishers, name, groupId, status, gender, privilege])
@@ -156,14 +164,14 @@ export function PublishersPage() {
   }
 
   return (
-    <div className="px-6 py-6 lg:px-8">
+    <div className="px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-soft text-indigo">
-            <Users size={22} />
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-indigo-soft text-indigo sm:h-12 sm:w-12">
+            <Users size={20} className="sm:h-[22px] sm:w-[22px]" />
           </span>
-          <div>
-            <h1 className="text-[28px] font-semibold tracking-tight">Publicadores</h1>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">Publicadores</h1>
             <p className="mt-1 text-sm text-muted">Gerencie os dados pessoais, privilégios congregacionais e grupos dos publicadores.</p>
           </div>
         </div>
@@ -203,7 +211,7 @@ export function PublishersPage() {
         </div>
       ) : null}
 
-      <div className="mt-5 flex gap-1 border-b border-line">
+      <div className="no-scrollbar mt-5 flex gap-1 overflow-x-auto border-b border-line">
         <TabLink active={tab === 'lista'} onClick={() => navigate('/publicadores')} icon={<LayoutList size={16} />} label="Lista" />
         <TabLink active={tab === 'grupos'} onClick={() => navigate('/publicadores/grupos')} icon={<Users size={16} />} label="Grupos" />
         <TabLink active={tab === 'estatisticas'} onClick={() => navigate('/publicadores/estatisticas')} icon={<BarChart3 size={16} />} label="Estatísticas" />
@@ -212,7 +220,7 @@ export function PublishersPage() {
       {tab === 'lista' ? (
         <section className="mt-4 rounded-2xl border border-line bg-white">
           <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-            <label className="relative min-w-56 flex-1">
+            <label className="relative w-full min-w-0 sm:min-w-56 sm:flex-1">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
               <input
                 value={name}
@@ -239,11 +247,13 @@ export function PublishersPage() {
             </Filter>
             <Filter value={privilege} label="Todos os privilégios" onChange={(value) => { setPrivilege(value); setPage(1) }}>
               <option value="">Todos os privilégios</option>
-              <option value="publisher">Publicador</option>
-              <option value="ministerialServant">Servo ministerial</option>
+              <option value="circuitOverseer">Superintendente de Circuito</option>
               <option value="elder">Ancião</option>
-              <option value="auxiliary">Pioneiro auxiliar</option>
+              <option value="ministerialServant">Servo ministerial</option>
+              <option value="special">Pioneiro especial</option>
               <option value="regular">Pioneiro regular</option>
+              <option value="auxiliary">Pioneiro auxiliar</option>
+              <option value="publisher">Publicador</option>
             </Filter>
             <button
               type="button"
@@ -1184,7 +1194,17 @@ function PublisherTable({
                     </span>
                   </span>
                 </td>
-                <td className="px-3 py-3">{group ? <GroupChip group={group} /> : <span className="text-muted">Sem grupo</span>}</td>
+                <td className="px-3 py-3">
+                  {group ? (
+                    <GroupChip group={group} />
+                  ) : publisher.privilege === 'circuitOverseer' ? (
+                    <span className="inline-flex items-center rounded-full border border-[#FDE68A] bg-[#FEF3C7] px-2 py-0.5 text-xs font-semibold text-[#92400E]">
+                      Circuito (Especial)
+                    </span>
+                  ) : (
+                    <span className="text-muted">Sem grupo</span>
+                  )}
+                </td>
                 <td className="px-3 py-3">{publisher.gender === 'feminino' ? 'Feminino' : 'Masculino'}</td>
                 <td className="px-3 py-3">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${publisher.status === 'active' ? 'bg-[#ECFDF5] text-[#047857]' : 'bg-[#F1F5F9] text-[#64748B]'}`}>
@@ -1192,7 +1212,13 @@ function PublisherTable({
                   </span>
                 </td>
                 <td className="px-3 py-3">
-                  <span className="block">{privilegeLabel(publisher)}</span>
+                  {publisher.privilege === 'circuitOverseer' ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-[#FDE68A] bg-[#FEF3C7] px-2.5 py-0.5 text-xs font-semibold text-[#92400E]">
+                      {privilegeLabel(publisher)}
+                    </span>
+                  ) : (
+                    <span className="block">{privilegeLabel(publisher)}</span>
+                  )}
                 </td>
                 <td className="px-3 py-3 text-muted">{publisher.phone || '—'}</td>
                 <td className="px-3 py-3 text-right" onClick={(event) => event.stopPropagation()}>
@@ -1406,11 +1432,17 @@ function EditPublisher({
           </select>
         </label>
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <label className="text-xs text-muted">Privilégio congregacional
+          <label className="text-xs text-muted">Privilégio / Cargo
             <select
               value={gender === 'feminino' ? 'publisher' : privilege}
               disabled={gender === 'feminino'}
-              onChange={(event) => setPrivilege(event.target.value as MockPrivilege)}
+              onChange={(event) => {
+                const nextPriv = event.target.value as MockPrivilege
+                setPrivilege(nextPriv)
+                if (nextPriv === 'circuitOverseer') {
+                  setGroupId('')
+                }
+              }}
               className="mt-1 h-10 w-full rounded-lg border border-line px-2 text-sm text-ink disabled:bg-[#F8FAFC] disabled:text-muted"
             >
               <option value="publisher">{gender === 'feminino' ? 'Publicadora' : 'Publicador'}</option>
@@ -1418,15 +1450,17 @@ function EditPublisher({
                 <>
                   <option value="ministerialServant">Servo ministerial</option>
                   <option value="elder">Ancião</option>
+                  <option value="circuitOverseer">Superintendente de Circuito (Especial)</option>
                 </>
               ) : null}
             </select>
           </label>
-          <label className="text-xs text-muted">Pioneiro
+          <label className="text-xs text-muted">Pioneiro / Tipo especial
             <select value={pioneer} onChange={(event) => setPioneer(event.target.value as MockPioneer)} className="mt-1 h-10 w-full rounded-lg border border-line px-2 text-sm text-ink">
               <option value="none">{gender === 'feminino' ? 'Não é pioneira' : 'Não é pioneiro'}</option>
               <option value="auxiliary">{gender === 'feminino' ? 'Pioneira auxiliar' : 'Pioneiro auxiliar'}</option>
               <option value="regular">{gender === 'feminino' ? 'Pioneira regular' : 'Pioneiro regular'}</option>
+              <option value="special">{gender === 'feminino' ? 'Pioneira especial' : 'Pioneiro especial'}</option>
             </select>
           </label>
         </div>
@@ -1443,7 +1477,9 @@ function Statistics({ publishers }: { publishers: MockPublisher[] }) {
   const { groups } = usePublisherCatalog()
   const active = publishers.filter((publisher) => publisher.status === 'active').length
   const women = publishers.filter((publisher) => publisher.gender === 'feminino').length
-  const unassigned = publishers.filter((publisher) => !publisher.groupId).length
+  const unassigned = publishers.filter(
+    (publisher) => !publisher.groupId && publisher.privilege !== 'circuitOverseer',
+  ).length
   return (
     <section className="mt-4 grid gap-3 sm:grid-cols-3">
       <Stat label="Publicadores" value={String(publishers.length)} />
@@ -1871,11 +1907,18 @@ function AddPublisher({
           </label>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <label className="text-xs text-muted">Privilégio congregacional
+          <label className="text-xs text-muted">Privilégio / Cargo
             <select
               value={draft.gender === 'feminino' ? 'publisher' : draft.privilege}
               disabled={draft.gender === 'feminino'}
-              onChange={(event) => setDraft({ ...draft, privilege: event.target.value as MockPrivilege })}
+              onChange={(event) => {
+                const nextPriv = event.target.value as MockPrivilege
+                setDraft({
+                  ...draft,
+                  privilege: nextPriv,
+                  groupId: nextPriv === 'circuitOverseer' ? null : draft.groupId,
+                })
+              }}
               className="mt-1 h-10 w-full rounded-lg border border-line px-2 text-sm text-ink disabled:bg-[#F8FAFC] disabled:text-muted"
             >
               <option value="publisher">{draft.gender === 'feminino' ? 'Publicadora' : 'Publicador'}</option>
@@ -1883,15 +1926,17 @@ function AddPublisher({
                 <>
                   <option value="ministerialServant">Servo ministerial</option>
                   <option value="elder">Ancião</option>
+                  <option value="circuitOverseer">Superintendente de Circuito (Especial)</option>
                 </>
               ) : null}
             </select>
           </label>
-          <label className="text-xs text-muted">Pioneiro
+          <label className="text-xs text-muted">Pioneiro / Tipo especial
             <select value={draft.pioneer} onChange={(event) => setDraft({ ...draft, pioneer: event.target.value as MockPioneer })} className="mt-1 h-10 w-full rounded-lg border border-line px-2 text-sm text-ink">
               <option value="none">{draft.gender === 'feminino' ? 'Não é pioneira' : 'Não é pioneiro'}</option>
               <option value="auxiliary">{draft.gender === 'feminino' ? 'Pioneira auxiliar' : 'Pioneiro auxiliar'}</option>
               <option value="regular">{draft.gender === 'feminino' ? 'Pioneira regular' : 'Pioneiro regular'}</option>
+              <option value="special">{draft.gender === 'feminino' ? 'Pioneira especial' : 'Pioneiro especial'}</option>
             </select>
           </label>
         </div>

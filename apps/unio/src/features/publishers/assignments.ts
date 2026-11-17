@@ -22,8 +22,17 @@ export function candidatesForMeetingLabel(publishers: MockPublisher[], label: st
     return brothers.filter((publisher) => publisher.duties.includes('volante') || publisher.duties.includes('microfone'))
   }
   if (key === 'áudio e vídeo' || key === 'audio e video') return withDuty(brothers, 'audio')
+  if (key === 'superintendente de circuito' || key.includes('superintendente de circuito')) {
+    const co = brothers.filter((publisher) => publisher.privilege === 'circuitOverseer')
+    return co.length > 0 ? co : brothers
+  }
   if (key === 'presidente') {
-    return brothers.filter((publisher) => publisher.privilege === 'elder' || publisher.privilege === 'ministerialServant')
+    return brothers.filter(
+      (publisher) =>
+        publisher.privilege === 'circuitOverseer' ||
+        publisher.privilege === 'elder' ||
+        publisher.privilege === 'ministerialServant',
+    )
   }
   return active
 }

@@ -40,7 +40,15 @@ export function TerritoryPill({
   disabled?: boolean
 }) {
   const tooltipParts: string[] = [`Território ${code} — ${statusLabelPt(status)}`]
-  if (snapshot?.waitingForSiblingCodes.length) {
+  if (snapshot?.missingSegmentCodes && snapshot.missingSegmentCodes.length > 0) {
+    const doneStr =
+      snapshot.completedSegmentCodes && snapshot.completedSegmentCodes.length > 0
+        ? ` (${snapshot.completedSegmentCodes.join(', ')} já trabalhado)`
+        : ''
+    tooltipParts.push(
+      `Faltando concluir: ${snapshot.missingSegmentCodes.join(', ')}${doneStr}`,
+    )
+  } else if (snapshot?.waitingForSiblingCodes.length) {
     tooltipParts.push(`Aguarda conclusão de ${snapshot.waitingForSiblingCodes.join(', ')}`)
   } else if (snapshot?.pendingSiblingCompletion) {
     tooltipParts.push(
@@ -60,13 +68,18 @@ export function TerritoryPill({
     tooltipParts.push(`Última designação: ${formatShortDayMonth(snapshot.lastAssignedIsoDate)}`)
   }
 
+  const missingBadge =
+    snapshot?.missingSegmentCodes && snapshot.missingSegmentCodes.length > 0
+      ? snapshot.missingSegmentCodes.join('/')
+      : null
+
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
       title={tooltipParts.join(' • ')}
-      className={`inline-flex h-8 min-w-[2.45rem] items-center justify-center rounded-full border px-2.5 text-xs font-semibold transition select-none ${territoryPillTone(
+      className={`inline-flex h-8 min-w-[2.45rem] items-center justify-center gap-1 rounded-full border px-2.5 text-xs font-semibold transition select-none ${territoryPillTone(
         status,
       )} ${
         selected
@@ -74,8 +87,13 @@ export function TerritoryPill({
           : ''
       } ${disabled ? 'cursor-default opacity-80' : 'cursor-pointer'}`}
     >
-      {selected ? <Check size={12} className="mr-1 shrink-0 text-indigo" /> : null}
-      {code}
+      {selected ? <Check size={12} className="mr-0.5 shrink-0 text-indigo" /> : null}
+      <span>{code}</span>
+      {missingBadge ? (
+        <span className="rounded-full bg-white/80 px-1.5 py-0.2 text-[10px] font-bold text-[#1E40AF]">
+          falta {missingBadge}
+        </span>
+      ) : null}
     </button>
   )
 }

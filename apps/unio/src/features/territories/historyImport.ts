@@ -28,6 +28,7 @@ export type TerritoryHistoryImportFileJson = {
   year?: number
   dateFormat?: string
   territoryValueFormat?: string
+  updatedThrough?: string
   regions: RawHistoryRegionJson[]
   importNotes?: string[]
 }
@@ -80,6 +81,7 @@ export type HistoryImportItemPreview = {
   parsedTerritory: ParsedHistoryTerritoryToken
   territoryMatchStatus: TerritoryMatchStatus
   matchedTerritory: TerritoryRecord | null
+  targetSegmentCode: string | null
   suggestedTerritories: Array<{
     territory: TerritoryRecord
     reason: string
@@ -130,6 +132,44 @@ export function normalizeSearchText(value: string): string {
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+export function canonicalRegionKey(value: string): string {
+  return normalizeSearchText(value)
+    .replace(
+      /^(?:parque\s+d[aeo]s?\s+|parque\s+|pq\s+d[aeo]s?\s+|pq\s+|jardim\s+d[aeo]s?\s+|jardim\s+|jd\s+d[aeo]s?\s+|jd\s+|vila\s+|bairro\s+|conjunto\s+)/i,
+      '',
+    )
+    .trim()
+}
+
+export function isSameHistoryRegion(regionA: string, regionB: string): boolean {
+  const normA = normalizeSearchText(regionA)
+  const normB = normalizeSearchText(regionB)
+  if (!normA || !normB) return false
+  if (normA === normB) return true
+  const canonA = canonicalRegionKey(regionA)
+  const canonB = canonicalRegionKey(regionB)
+  if (canonA && canonB && canonA === canonB) return true
+  if (canonA && canonB && (normA.endsWith(` ${canonB}`) || normB.endsWith(` ${canonA}`))) {
+    return true
+  }
+  return false
+}
+
+export function defaultSegmentCodeForTerritory(
+  territory: TerritoryRecord | null,
+  parsedToken: ParsedHistoryTerritoryToken,
+): string | null {
+  if (!parsedToken.partLabel) return null
+  const part = parsedToken.partLabel.toUpperCase()
+  if (territory) {
+    if (territory.partLabel && territory.partLabel.toUpperCase() === part) {
+      return null
+    }
+    return `${territory.baseNumber || parsedToken.baseNumber}${part}`
+  }
+  return `${parsedToken.baseNumber}${part}`
 }
 
 /**
@@ -274,6 +314,8 @@ export function validateTerritoryHistoryJson(
       dateFormat: typeof obj.dateFormat === 'string' ? obj.dateFormat : undefined,
       territoryValueFormat:
         typeof obj.territoryValueFormat === 'string' ? obj.territoryValueFormat : undefined,
+      updatedThrough:
+        typeof obj.updatedThrough === 'string' ? obj.updatedThrough.trim() : undefined,
       regions,
       importNotes: Array.isArray(obj.importNotes)
         ? obj.importNotes.filter((n): n is string => typeof n === 'string')
@@ -611,16 +653,16 @@ export function matchHistoryTerritory(params: {
 }): {
   status: TerritoryMatchStatus
   matched: TerritoryRecord | null
+  targetSegmentCode: string | null
   suggestions: Array<{ territory: TerritoryRecord; reason: string }>
 } {
   const { parsedToken, regionNameJson, territories } = params
-  const normRegion = normalizeSearchText(regionNameJson)
 
-  const inRegion = territories.filter(
-    (t) => normalizeSearchText(t.regionName) === normRegion,
+  const inRegion = territories.filter((t) =>
+    isSameHistoryRegion(t.regionName, regionNameJson),
   )
   const otherRegions = territories.filter(
-    (t) => normalizeSearchText(t.regionName) !== normRegion,
+    (t) => !isSameHistoryRegion(t.regionName, regionNameJson),
   )
 
   // 1. Exact code match in the target region (or commercial code match)
@@ -647,6 +689,20 @@ export function matchHistoryTerritory(params: {
     return {
       status: 'matched',
       matched: exactInRegion,
+      targetSegmentCode: defaultSegmentCodeForTerritory(exactInRegion, parsedToken),
+      suggestions: [],
+    }
+  }
+
+  // 1b. Base territory match in the target region when fractions (e.g. 30A, 30B, 26A, 03B) are segments of territory 30 / 26 / 03
+  const baseInRegion =
+    inRegion.find((t) => t.baseNumber === parsedToken.baseNumber && !t.partLabel) ??
+    inRegion.find((t) => t.baseNumber === parsedToken.baseNumber)
+  if (baseInRegion) {
+    return {
+      status: 'matched',
+      matched: baseInRegion,
+      targetSegmentCode: defaultSegmentCodeForTerritory(baseInRegion, parsedToken),
       suggestions: [],
     }
   }
@@ -665,7 +721,7 @@ export function matchHistoryTerritory(params: {
     }
   }
 
-  // Suggestion B: Same baseNumber in the target region (e.g. token is "08C" or "11B" and region has "08" or "11", or vice versa)
+  // Suggestion B: Same baseNumber in the target region
   for (const t of inRegion) {
     if (t.baseNumber === parsedToken.baseNumber) {
       suggestions.push({
@@ -681,9 +737,12 @@ export function matchHistoryTerritory(params: {
       t.baseNumber === parsedToken.baseNumber &&
       !suggestions.some((s) => s.territory.id === t.id)
     ) {
+      const segSuffix = parsedToken.partLabel
+        ? ` (atribuindo segmento ${t.baseNumber}${parsedToken.partLabel.toUpperCase()})`
+        : ''
       suggestions.push({
         territory: t,
-        reason: `Numeração base (${t.code}) na região ${t.regionName}`,
+        reason: `Numeração base (${t.code}) na região ${t.regionName}${segSuffix}`,
       })
     }
   }
@@ -691,6 +750,7 @@ export function matchHistoryTerritory(params: {
   return {
     status: 'pending',
     matched: null,
+    targetSegmentCode: defaultSegmentCodeForTerritory(null, parsedToken),
     suggestions,
   }
 }
@@ -702,8 +762,13 @@ export function formatHistorySessionNotes(params: {
   dateEndIso: string | null
   dateNote: string | null
   rawLine: string
+  targetSegmentCode?: string | null
 }): string {
   const parts: string[] = []
+
+  if (params.targetSegmentCode) {
+    parts.push(`Segmento: ${params.targetSegmentCode}`)
+  }
 
   if (params.parsedTerritory.completionState === 'partial') {
     parts.push('Trabalho parcial (parte)')
@@ -755,10 +820,10 @@ export function recomputeImportSummary(
   regions: RegionRecord[],
   territories: TerritoryRecord[],
 ): HistoryImportSummary {
-  const knownRegionNames = new Set<string>([
-    ...regions.map((r) => normalizeSearchText(r.name)),
-    ...territories.map((t) => normalizeSearchText(t.regionName)),
-  ])
+  const allKnownRegionNames = [
+    ...regions.map((r) => r.name),
+    ...territories.map((t) => t.regionName),
+  ]
 
   const byRegion = file.regions.map((reg) => {
     const regItems = items.filter(
@@ -770,9 +835,12 @@ export function recomputeImportSummary(
         Boolean(i.matchedTerritory),
     ).length
     const pendingTerritoryCount = regItems.length - matchedTerritoryCount
+    const regionMatched = allKnownRegionNames.some((known) =>
+      isSameHistoryRegion(known, reg.name),
+    )
     return {
       regionName: reg.name,
-      regionMatched: knownRegionNames.has(normalizeSearchText(reg.name)),
+      regionMatched,
       entryCount: reg.entries.length,
       itemCount: regItems.length,
       matchedTerritoryCount,
@@ -853,11 +921,6 @@ export function buildHistoryImportPreview(params: {
     existingWorkSessions,
   } = params
 
-  const regionByNorm = new Map<string, RegionRecord>()
-  for (const r of regions) {
-    regionByNorm.set(normalizeSearchText(r.name), r)
-  }
-
   const existingSourceKeys = new Set<string>()
   const existingDocIds = new Set<string>()
   const existingSemanticKeys = new Set<string>()
@@ -875,7 +938,8 @@ export function buildHistoryImportPreview(params: {
   const items: HistoryImportItemPreview[] = []
 
   for (const reg of file.regions) {
-    const matchedRegion = regionByNorm.get(normalizeSearchText(reg.name)) ?? null
+    const matchedRegion =
+      regions.find((r) => isSameHistoryRegion(r.name, reg.name)) ?? null
 
     for (let eIdx = 0; eIdx < reg.entries.length; eIdx += 1) {
       const entry = reg.entries[eIdx]!
@@ -909,6 +973,7 @@ export function buildHistoryImportPreview(params: {
         })
 
         const matchedTerritory = territoryMatch.matched
+        const targetSegmentCode = territoryMatch.targetSegmentCode
         const matchedConductor =
           conductorMatch.status === 'matched' ? conductorMatch.matched : null
         const effectiveConductorName =
@@ -945,6 +1010,7 @@ export function buildHistoryImportPreview(params: {
           dateEndIso: entry.dateEnd ?? null,
           dateNote: entry.dateNote ?? null,
           rawLine,
+          targetSegmentCode,
         })
 
         items.push({
@@ -970,6 +1036,7 @@ export function buildHistoryImportPreview(params: {
           parsedTerritory,
           territoryMatchStatus: territoryMatch.status,
           matchedTerritory,
+          targetSegmentCode,
           suggestedTerritories: territoryMatch.suggestions,
           periodType: parsedConductor.periodType,
           completionState: parsedTerritory.completionState,

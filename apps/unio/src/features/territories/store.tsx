@@ -11,6 +11,7 @@ import { useAccount } from '../../auth'
 import { usePublisherCatalog } from '../publishers/catalog'
 import { inferPublisherGender } from '../publishers/importGroups'
 import {
+  clearTerritoryHistoryBatch,
   createRegionDoc,
   createTerritoryDocs,
   deleteAssignmentDoc,
@@ -19,15 +20,21 @@ import {
   deleteTerritoryDoc,
   importHistoryWorkSessionsBatch,
   loadTerritoriesBundle,
+  recordTerritoryExecutionDoc,
   saveAssignmentDoc,
   saveRecurringDepartureDoc,
+  saveTerritorySegmentsDoc,
   setRecurringDepartureActiveDoc,
   updateRegionDoc,
   updateTerritoryDoc,
+  uploadTerritoryMapImage,
+  type ClearTerritoryHistoryResult,
   type CongregationUserLink,
   type CreateTerritoriesPayload,
+  type EditableTerritorySegmentInput,
   type ImportHistoryBatchResult,
   type ImportHistoryWorkSessionWriteItem,
+  type RecordTerritoryExecutionPayload,
   type SaveAssignmentPayload,
   type SaveRecurringDeparturePayload,
 } from './api'
@@ -47,6 +54,8 @@ import type {
 export type SundayGroupOption = {
   id: string
   name: string
+  superintendentName?: string | null
+  assistantName?: string | null
 }
 
 export type DefaultConductorsCriteria = {
@@ -109,6 +118,11 @@ export type TerritoriesContextValue = {
     },
   ) => Promise<void>
   deleteTerritory: (territoryId: string) => Promise<void>
+  saveTerritorySegments: (
+    territoryId: string,
+    nextSegments: EditableTerritorySegmentInput[],
+  ) => Promise<void>
+  uploadTerritoryImage: (territoryId: string, file: File) => Promise<string>
   saveRecurringDeparture: (
     payload: Omit<
       SaveRecurringDeparturePayload,
@@ -124,10 +138,20 @@ export type TerritoriesContextValue = {
     > & { conductorNames: string[] },
   ) => Promise<string>
   deleteAssignment: (assignmentId: string) => Promise<void>
+  recordTerritoryExecution: (
+    payload: Omit<RecordTerritoryExecutionPayload, 'congregationId'>,
+  ) => Promise<void>
   importHistoryBatch: (params: {
     items: ImportHistoryWorkSessionWriteItem[]
     ignoredCount: number
   }) => Promise<ImportHistoryBatchResult>
+  clearHistory: (options?: {
+    clearWorkSessions?: boolean
+    clearAssignments?: boolean
+    resetSegments?: boolean
+    workSessionIds?: string[]
+    assignmentIds?: string[]
+  }) => Promise<ClearTerritoryHistoryResult>
 }
 
 const TerritoriesContext = createContext<TerritoriesContextValue | null>(null)
@@ -726,7 +750,18 @@ export function TerritoriesProvider({ children }: { children: ReactNode }) {
     const merged = new Map<string, SundayGroupOption>()
     for (const g of publisherGroups) {
       if (g.name.trim()) {
-        merged.set(g.id, { id: g.id, name: g.name.trim() })
+        const sup = g.superintendentPublisherId
+          ? publisherById.get(g.superintendentPublisherId)
+          : undefined
+        const asst = g.assistantPublisherId
+          ? publisherById.get(g.assistantPublisherId)
+          : undefined
+        merged.set(g.id, {
+          id: g.id,
+          name: g.name.trim(),
+          superintendentName: sup?.status === 'active' ? sup.name : null,
+          assistantName: asst?.status === 'active' ? asst.name : null,
+        })
       }
     }
     for (const fg of fieldGroups) {
@@ -734,11 +769,11 @@ export function TerritoriesProvider({ children }: { children: ReactNode }) {
         (item) => item.name.toLowerCase() === fg.name.toLowerCase(),
       )
       if (!existsByName && fg.name.trim()) {
-        merged.set(fg.id, { id: fg.id, name: fg.name.trim() })
+        merged.set(fg.id, { id: fg.id, name: fg.name.trim(), superintendentName: null, assistantName: null })
       }
     }
     return [...merged.values()].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
-  }, [publisherGroups, fieldGroups])
+  }, [publisherGroups, fieldGroups, publisherById])
 
   const resolveConductors = useCallback(
     (names: string[]) => {
@@ -821,6 +856,25 @@ export function TerritoriesProvider({ children }: { children: ReactNode }) {
         await deleteTerritoryDoc(territoryId, segments)
         await reload()
       },
+      async saveTerritorySegments(territoryId, nextSegments) {
+        if (!congregationId) throw new Error('Congregação não identificada.')
+        const existingForTerritory = segments.filter((s) => s.territoryId === territoryId)
+        await saveTerritorySegmentsDoc({
+          congregationId,
+          territoryId,
+          existingSegments: existingForTerritory,
+          segments: nextSegments,
+        })
+        await reload()
+      },
+      async uploadTerritoryImage(territoryId, file) {
+        if (!congregationId) throw new Error('Congregação não identificada.')
+        return await uploadTerritoryMapImage({
+          congregationId,
+          territoryId,
+          file,
+        })
+      },
       async saveRecurringDeparture(payload) {
         if (!congregationId) throw new Error('Congregação não identificada.')
         const resolved = resolveConductors(payload.conductorNames)
@@ -894,12 +948,29 @@ export function TerritoriesProvider({ children }: { children: ReactNode }) {
         await deleteAssignmentDoc(assignmentId)
         await reload()
       },
+      async recordTerritoryExecution(payload) {
+        if (!congregationId) throw new Error('Congregação não identificada.')
+        await recordTerritoryExecutionDoc({
+          ...payload,
+          congregationId,
+        })
+        await reload()
+      },
       async importHistoryBatch({ items, ignoredCount }) {
         if (!congregationId) throw new Error('Congregação não identificada.')
         const res = await importHistoryWorkSessionsBatch({
           congregationId,
           items,
           ignoredCount,
+        })
+        await reload()
+        return res
+      },
+      async clearHistory(options) {
+        if (!congregationId) throw new Error('Congregação não identificada.')
+        const res = await clearTerritoryHistoryBatch({
+          congregationId,
+          ...options,
         })
         await reload()
         return res

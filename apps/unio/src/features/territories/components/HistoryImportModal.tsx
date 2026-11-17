@@ -8,16 +8,15 @@ import {
   Layers,
   MapPin,
   Search,
-  Sparkles,
   Upload,
   Users,
   X,
 } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import type { ImportHistoryBatchResult, ImportHistoryWorkSessionWriteItem } from '../api'
-import defaultHistory2026Json from '../data/historico_territorios_2026.json'
 import {
   buildHistoryImportPreview,
+  defaultSegmentCodeForTerritory,
   formatHistorySessionNotes,
   normalizeSearchText,
   recomputeImportSummary,
@@ -25,7 +24,7 @@ import {
   type HistoryImportItemPreview,
   type TerritoryHistoryImportFileJson,
 } from '../historyImport'
-import { formatFullDateBr, formatShortDayMonth, periodTypeLabel } from '../status'
+import { compareTerritoryCodes, formatFullDateBr, formatShortDayMonth, periodTypeLabel } from '../status'
 import { useTerritories } from '../store'
 import type { WorkSessionCompletionState } from '../types'
 
@@ -43,10 +42,24 @@ export function HistoryImportModal({
     congregationId,
     regions,
     territories,
+    segments,
     conductorOptions,
     workSessions,
     importHistoryBatch,
   } = useTerritories()
+
+  const segmentsByTerritoryId = useMemo(() => {
+    const map = new Map<string, typeof segments>()
+    for (const seg of segments) {
+      const bucket = map.get(seg.territoryId)
+      if (bucket) bucket.push(seg)
+      else map.set(seg.territoryId, [seg])
+    }
+    for (const bucket of map.values()) {
+      bucket.sort((a, b) => compareTerritoryCodes(a.description, b.description))
+    }
+    return map
+  }, [segments])
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -97,7 +110,7 @@ export function HistoryImportModal({
   async function handleFileSelect(file: File | undefined) {
     if (!file) return
     try {
-      const text = await file.text()
+      const text = (await file.text()).replace(/^\uFEFF/, '')
       const parsed = JSON.parse(text) as unknown
       loadJsonPayload(parsed, file.name)
     } catch (err) {
@@ -107,10 +120,6 @@ export function HistoryImportModal({
           : 'Arquivo JSON inválido ou corrompido.',
       )
     }
-  }
-
-  function handleLoadBuiltIn2026() {
-    loadJsonPayload(defaultHistory2026Json, 'historico_territorios_2026.json')
   }
 
   // Group conductors by normalized cleanName (or rawConductor when cleanName is empty)
@@ -173,6 +182,7 @@ export function HistoryImportModal({
         count: number
         status: HistoryImportItemPreview['territoryMatchStatus']
         matchedTerritory: HistoryImportItemPreview['matchedTerritory']
+        targetSegmentCode: string | null
         suggestions: HistoryImportItemPreview['suggestedTerritories']
       }
     >()
@@ -191,6 +201,7 @@ export function HistoryImportModal({
           count: 1,
           status: item.territoryMatchStatus,
           matchedTerritory: item.matchedTerritory,
+          targetSegmentCode: item.targetSegmentCode,
           suggestions: item.suggestedTerritories,
         })
       }
@@ -347,6 +358,7 @@ export function HistoryImportModal({
             ...item,
             territoryMatchStatus: 'pending',
             matchedTerritory: null,
+            targetSegmentCode: defaultSegmentCodeForTerritory(null, item.parsedTerritory),
           }
         }
         if (territoryId === 'ignored') {
@@ -357,13 +369,50 @@ export function HistoryImportModal({
           }
         }
         if (selectedTerritory) {
+          const nextSegCode = defaultSegmentCodeForTerritory(
+            selectedTerritory,
+            item.parsedTerritory,
+          )
           return {
             ...item,
             territoryMatchStatus: 'resolved',
             matchedTerritory: selectedTerritory,
+            targetSegmentCode: nextSegCode,
+            formattedNotes: formatHistorySessionNotes({
+              parsedTerritory: item.parsedTerritory,
+              parsedConductor: item.parsedConductor,
+              effectiveConductorName: item.effectiveConductorName,
+              dateEndIso: item.dateEndIso,
+              dateNote: item.dateNote,
+              rawLine: item.rawLine,
+              targetSegmentCode: nextSegCode,
+            }),
           }
         }
         return item
+      }),
+    )
+  }
+
+  function applyTerritorySegmentByGroup(groupKey: string, segmentCode: string) {
+    const normalized = segmentCode.trim().toUpperCase() || null
+    setItems((curr) =>
+      curr.map((item) => {
+        const key = `${normalizeSearchText(item.regionNameJson)}::${item.parsedTerritory.normalizedCode}`
+        if (key !== groupKey) return item
+        return {
+          ...item,
+          targetSegmentCode: normalized,
+          formattedNotes: formatHistorySessionNotes({
+            parsedTerritory: item.parsedTerritory,
+            parsedConductor: item.parsedConductor,
+            effectiveConductorName: item.effectiveConductorName,
+            dateEndIso: item.dateEndIso,
+            dateNote: item.dateNote,
+            rawLine: item.rawLine,
+            targetSegmentCode: normalized,
+          }),
+        }
       }),
     )
   }
@@ -374,10 +423,24 @@ export function HistoryImportModal({
         if (item.territoryMatchStatus !== 'pending') return item
         const topSuggestion = item.suggestedTerritories[0]?.territory ?? null
         if (!topSuggestion) return item
+        const nextSegCode = defaultSegmentCodeForTerritory(
+          topSuggestion,
+          item.parsedTerritory,
+        )
         return {
           ...item,
           territoryMatchStatus: 'resolved',
           matchedTerritory: topSuggestion,
+          targetSegmentCode: nextSegCode,
+          formattedNotes: formatHistorySessionNotes({
+            parsedTerritory: item.parsedTerritory,
+            parsedConductor: item.parsedConductor,
+            effectiveConductorName: item.effectiveConductorName,
+            dateEndIso: item.dateEndIso,
+            dateNote: item.dateNote,
+            rawLine: item.rawLine,
+            targetSegmentCode: nextSegCode,
+          }),
         }
       }),
     )
@@ -387,6 +450,7 @@ export function HistoryImportModal({
     itemKey: string,
     patch: {
       territoryId?: string
+      segmentCode?: string | null
       conductorOptionId?: string
       completionState?: WorkSessionCompletionState
     },
@@ -400,6 +464,7 @@ export function HistoryImportModal({
           if (patch.territoryId === 'pending') {
             next.territoryMatchStatus = 'pending'
             next.matchedTerritory = null
+            next.targetSegmentCode = defaultSegmentCodeForTerritory(null, next.parsedTerritory)
           } else if (patch.territoryId === 'ignored') {
             next.territoryMatchStatus = 'ignored'
             next.matchedTerritory = null
@@ -408,8 +473,13 @@ export function HistoryImportModal({
             if (found) {
               next.territoryMatchStatus = 'resolved'
               next.matchedTerritory = found
+              next.targetSegmentCode = defaultSegmentCodeForTerritory(found, next.parsedTerritory)
             }
           }
+        }
+
+        if (patch.segmentCode !== undefined) {
+          next.targetSegmentCode = patch.segmentCode?.trim().toUpperCase() || null
         }
 
         if (patch.conductorOptionId !== undefined) {
@@ -460,6 +530,7 @@ export function HistoryImportModal({
           dateEndIso: next.dateEndIso,
           dateNote: next.dateNote,
           rawLine: next.rawLine,
+          targetSegmentCode: next.targetSegmentCode,
         })
 
         return next
@@ -526,6 +597,8 @@ export function HistoryImportModal({
           docId: item.workSessionDocId,
           importSourceKey: item.importSourceKey,
           territoryId: matchedTerr.id,
+          territoryBaseNumber: matchedTerr.baseNumber,
+          targetSegmentCode: item.targetSegmentCode,
           conductorUserId: item.effectiveConductorUserId,
           conductorPublisherId: item.effectiveConductorPublisherId,
           conductorName: item.effectiveConductorName,
@@ -537,7 +610,7 @@ export function HistoryImportModal({
           periodType: item.periodType,
           regionId: matchedTerr.regionId ?? item.matchedRegion?.id ?? null,
           regionName: matchedTerr.regionName || item.regionNameJson,
-          territoryCodeRaw: item.parsedTerritory.rawToken,
+          territoryCodeRaw: item.targetSegmentCode || item.parsedTerritory.rawToken,
           raw: item.rawLine,
           notes: item.formattedNotes,
         })
@@ -627,25 +700,6 @@ export function HistoryImportModal({
                 />
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-[#F8FAFC] p-4">
-                <div>
-                  <p className="text-xs font-semibold text-ink">
-                    Arquivo oficial de histórico de 2026 disponível
-                  </p>
-                  <p className="text-xs text-muted">
-                    Contém os registros históricos de Guaíba e Laranjeiras (julho a novembro de 2026).
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleLoadBuiltIn2026}
-                  className="inline-flex h-9 items-center gap-2 rounded-xl bg-indigo px-4 text-xs font-semibold text-white shadow-xs transition hover:bg-indigo/90"
-                >
-                  <Sparkles size={14} />
-                  Carregar historico_territorios_2026.json
-                </button>
-              </div>
-
               {validationError ? (
                 <div className="flex items-start gap-2.5 rounded-2xl border border-[#FECACA] bg-[#FEF2F2] p-4 text-xs text-[#991B1B]">
                   <AlertTriangle size={16} className="mt-0.5 shrink-0" />
@@ -708,6 +762,11 @@ export function HistoryImportModal({
                   <span className="font-semibold text-ink">{fileName}</span>
                   {parsedFile.year ? (
                     <span className="text-muted">· Ano {parsedFile.year}</span>
+                  ) : null}
+                  {parsedFile.updatedThrough ? (
+                    <span className="rounded-md bg-[#EEF2FF] px-2 py-0.5 font-medium text-indigo">
+                      Atualizado até {formatFullDateBr(parsedFile.updatedThrough)}
+                    </span>
                   ) : null}
                 </div>
                 <button
@@ -1061,7 +1120,7 @@ export function HistoryImportModal({
                                   })
                                 }
                               }}
-                              className="h-9 min-w-[230px] rounded-xl border border-line bg-white px-3 text-xs text-ink outline-none focus:border-indigo"
+                              className="h-9 w-full rounded-xl border border-line bg-white px-3 text-xs text-ink outline-none focus:border-indigo sm:w-auto sm:min-w-[230px]"
                             >
                               <option value="">Selecionar publicador...</option>
                               <option value="__raw__">
@@ -1157,7 +1216,7 @@ export function HistoryImportModal({
                               ) : null}
                             </div>
 
-                            <div>
+                            <div className="flex flex-wrap items-center gap-2">
                               <select
                                 value={
                                   grp.status === 'resolved' && grp.matchedTerritory
@@ -1167,7 +1226,7 @@ export function HistoryImportModal({
                                 onChange={(e) =>
                                   applyTerritoryResolutionByGroup(grp.key, e.target.value)
                                 }
-                                className="h-9 min-w-[240px] rounded-xl border border-line bg-white px-3 text-xs text-ink outline-none focus:border-indigo"
+                                className="h-9 w-full rounded-xl border border-line bg-white px-3 text-xs text-ink outline-none focus:border-indigo sm:w-auto sm:min-w-[240px]"
                               >
                                 <option value="pending">Deixar pendente (não importar)</option>
                                 <option value="ignored">Ignorar registro</option>
@@ -1177,6 +1236,37 @@ export function HistoryImportModal({
                                   </option>
                                 ))}
                               </select>
+
+                              {grp.status === 'resolved' && grp.matchedTerritory ? (() => {
+                                const baseNum = grp.matchedTerritory.baseNumber || grp.matchedTerritory.code
+                                const existingSegs = segmentsByTerritoryId.get(grp.matchedTerritory.id) ?? []
+                                const candidateCodes = Array.from(
+                                  new Set([
+                                    ...existingSegs.map((s) => s.description.trim().toUpperCase()),
+                                    ...(grp.targetSegmentCode ? [grp.targetSegmentCode] : []),
+                                    `${baseNum}A`,
+                                    `${baseNum}B`,
+                                    `${baseNum}C`,
+                                  ]),
+                                ).sort(compareTerritoryCodes)
+                                return (
+                                  <select
+                                    value={grp.targetSegmentCode ?? ''}
+                                    onChange={(e) =>
+                                      applyTerritorySegmentByGroup(grp.key, e.target.value)
+                                    }
+                                    aria-label={`Segmento para ${grp.normalizedCode}`}
+                                    className="h-9 rounded-xl border border-[#C7D2FE] bg-[#EEF2FF] px-2.5 text-xs font-semibold text-[#4338CA] outline-none focus:border-indigo"
+                                  >
+                                    <option value="">Território inteiro ({grp.matchedTerritory.code})</option>
+                                    {candidateCodes.map((code) => (
+                                      <option key={code} value={code}>
+                                        Segmento {code}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )
+                              })() : null}
                             </div>
                           </div>
                         ))}
@@ -1215,7 +1305,7 @@ export function HistoryImportModal({
                       ))}
                     </div>
 
-                    <div className="relative min-w-[220px]">
+                    <div className="relative w-full sm:w-auto sm:min-w-[220px]">
                       <Search
                         size={14}
                         className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted"
@@ -1281,29 +1371,67 @@ export function HistoryImportModal({
                             </td>
 
                             <td className="px-3 py-2.5">
-                              <select
-                                value={
-                                  item.matchedTerritory
-                                    ? item.matchedTerritory.id
-                                    : item.territoryMatchStatus
-                                }
-                                onChange={(e) =>
-                                  updateSingleItem(item.itemKey, { territoryId: e.target.value })
-                                }
-                                className={`h-8 max-w-[180px] rounded-lg border px-2 text-xs outline-none ${
-                                  item.matchedTerritory
-                                    ? 'border-[#BBF7D0] bg-[#F0FDF4] text-[#166534]'
-                                    : 'border-[#FDE68A] bg-[#FFFBEB] text-[#92400E]'
-                                }`}
-                              >
-                                <option value="pending">Pendente (não encontrado)</option>
-                                <option value="ignored">Ignorar</option>
-                                {territories.map((t) => (
-                                  <option key={t.id} value={t.id}>
-                                    {t.code} ({t.regionName})
-                                  </option>
-                                ))}
-                              </select>
+                              <div className="flex flex-col gap-1">
+                                <select
+                                  value={
+                                    item.matchedTerritory
+                                      ? item.matchedTerritory.id
+                                      : item.territoryMatchStatus
+                                  }
+                                  onChange={(e) =>
+                                    updateSingleItem(item.itemKey, { territoryId: e.target.value })
+                                  }
+                                  className={`h-8 max-w-[180px] rounded-lg border px-2 text-xs outline-none ${
+                                    item.matchedTerritory
+                                      ? 'border-[#BBF7D0] bg-[#F0FDF4] text-[#166534]'
+                                      : 'border-[#FDE68A] bg-[#FFFBEB] text-[#92400E]'
+                                  }`}
+                                >
+                                  <option value="pending">Pendente (não encontrado)</option>
+                                  <option value="ignored">Ignorar</option>
+                                  {territories.map((t) => (
+                                    <option key={t.id} value={t.id}>
+                                      {t.code} ({t.regionName})
+                                    </option>
+                                  ))}
+                                </select>
+
+                                {item.matchedTerritory ? (() => {
+                                  const baseNum =
+                                    item.matchedTerritory.baseNumber || item.matchedTerritory.code
+                                  const existingSegs =
+                                    segmentsByTerritoryId.get(item.matchedTerritory.id) ?? []
+                                  const candidateCodes = Array.from(
+                                    new Set([
+                                      ...existingSegs.map((s) => s.description.trim().toUpperCase()),
+                                      ...(item.targetSegmentCode ? [item.targetSegmentCode] : []),
+                                      `${baseNum}A`,
+                                      `${baseNum}B`,
+                                      `${baseNum}C`,
+                                    ]),
+                                  ).sort(compareTerritoryCodes)
+                                  return (
+                                    <select
+                                      value={item.targetSegmentCode ?? ''}
+                                      onChange={(e) =>
+                                        updateSingleItem(item.itemKey, {
+                                          segmentCode: e.target.value || null,
+                                        })
+                                      }
+                                      className="h-7 max-w-[180px] rounded-lg border border-[#C7D2FE] bg-[#EEF2FF] px-2 text-[11px] font-semibold text-[#4338CA] outline-none"
+                                    >
+                                      <option value="">
+                                        Inteiro ({item.matchedTerritory.code})
+                                      </option>
+                                      {candidateCodes.map((code) => (
+                                        <option key={code} value={code}>
+                                          Seg. {code}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  )
+                                })() : null}
+                              </div>
                             </td>
 
                             <td className="px-3 py-2.5">

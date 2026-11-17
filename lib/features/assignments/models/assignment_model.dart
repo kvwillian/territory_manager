@@ -8,6 +8,7 @@ class AssignmentModel {
     this.conductorIds = const [],
     this.meetingLocationId,
     this.territoryIds = const [],
+    this.assignedSegmentsByTerritory = const {},
     this.preachingSessionId,
     this.congregationId,
     this.groupId,
@@ -23,6 +24,8 @@ class AssignmentModel {
   final String? meetingLocationId;
   /// Territories assigned for this session. Grouped by neighborhood in UI.
   final List<String> territoryIds;
+  /// Specific segment IDs designated per territoryId for this session.
+  final Map<String, List<String>> assignedSegmentsByTerritory;
   /// Optional link to PreachingSession (day of week, meeting location, conductors).
   final String? preachingSessionId;
   final String? congregationId;
@@ -39,6 +42,10 @@ class AssignmentModel {
     return [];
   }
 
+  List<String> assignedSegmentsFor(String territoryId) {
+    return assignedSegmentsByTerritory[territoryId] ?? const [];
+  }
+
   bool assignsConductor(String userId) => conductorIds.contains(userId);
 
   AssignmentModel copyWith({
@@ -48,6 +55,7 @@ class AssignmentModel {
     List<String>? conductorIds,
     String? meetingLocationId,
     List<String>? territoryIds,
+    Map<String, List<String>>? assignedSegmentsByTerritory,
     String? preachingSessionId,
     String? congregationId,
     String? groupId,
@@ -60,6 +68,8 @@ class AssignmentModel {
       conductorIds: conductorIds ?? this.conductorIds,
       meetingLocationId: meetingLocationId ?? this.meetingLocationId,
       territoryIds: territoryIds ?? this.territoryIds,
+      assignedSegmentsByTerritory:
+          assignedSegmentsByTerritory ?? this.assignedSegmentsByTerritory,
       preachingSessionId: preachingSessionId ?? this.preachingSessionId,
       congregationId: congregationId ?? this.congregationId,
       groupId: clearGroupId ? null : (groupId ?? this.groupId),
@@ -75,6 +85,7 @@ class AssignmentModel {
       'conductorId': conductorIds.isEmpty ? null : conductorIds.first,
       'meetingLocationId': meetingLocationId,
       'territoryIds': territoryIds,
+      'assignedSegmentsByTerritory': assignedSegmentsByTerritory,
       'preachingSessionId': preachingSessionId,
       'congregationId': congregationId,
       'groupId': groupId,
@@ -94,6 +105,18 @@ class AssignmentModel {
     if (conductorIds.isEmpty && legacy != null && legacy.isNotEmpty) {
       conductorIds = [legacy];
     }
+    final rawSegMap = map['assignedSegmentsByTerritory'];
+    final assignedSegmentsByTerritory = <String, List<String>>{};
+    if (rawSegMap is Map) {
+      for (final entry in rawSegMap.entries) {
+        final key = entry.key.toString();
+        final val = entry.value;
+        if (val is List) {
+          assignedSegmentsByTerritory[key] =
+              val.map((e) => e.toString()).toList();
+        }
+      }
+    }
     return AssignmentModel(
       id: map['id'] as String,
       date: DateTime.parse(map['date'] as String),
@@ -101,6 +124,7 @@ class AssignmentModel {
       conductorIds: conductorIds,
       meetingLocationId: map['meetingLocationId'] as String?,
       territoryIds: territoryIds,
+      assignedSegmentsByTerritory: assignedSegmentsByTerritory,
       preachingSessionId: map['preachingSessionId'] as String?,
       congregationId: map['congregationId'] as String?,
       groupId: map['groupId'] as String?,

@@ -88,8 +88,8 @@ export function CleaningPage() {
   }
 
   return (
-    <div className="px-6 py-6 lg:px-8">
-      <h1 className="text-[28px] font-semibold tracking-tight">Limpeza</h1>
+    <div className="px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8">
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">Limpeza</h1>
       <p className="mt-1 text-sm text-muted">As datas são as reuniões já cadastradas. Envie cada responsável para gravar.</p>
       {error ? <p className="mt-3 text-sm text-[#9F1239]">{error}</p> : null}
       <div className="mt-5 flex h-11 w-fit items-center rounded-xl border border-line bg-white">

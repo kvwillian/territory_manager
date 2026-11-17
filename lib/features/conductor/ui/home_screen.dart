@@ -113,69 +113,71 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-            _buildGreeting(context, user),
-            const SizedBox(height: AppSpacing.sectionSpacing),
-            _ConductorCalendar(
-              focusedDay: _focusedDay,
-              onDateSelected: (date) {
-                ref.read(conductorSelectedDateProvider.notifier).state = date;
-              },
-              onPageChanged: (day) {
-                setState(() => _focusedDay = day);
-              },
-              selectedDate: normalizedDate,
-              sessionDates: assignmentDatesAsync.whenOrNull(data: (d) => d) ?? {},
-            ),
-            const SizedBox(height: AppSpacing.sectionSpacing),
-            if (assignment != null) ...[
-              _SessionCard(
-                assignment: assignment,
-                meetingLocation: meetingLocation,
+              _buildGreeting(context, user),
+              const SizedBox(height: AppSpacing.sectionSpacing),
+              _ConductorCalendar(
+                focusedDay: _focusedDay,
+                onDateSelected: (date) {
+                  ref.read(conductorSelectedDateProvider.notifier).state = date;
+                },
+                onPageChanged: (day) {
+                  setState(() => _focusedDay = day);
+                },
                 selectedDate: normalizedDate,
-                nextAssignmentDate: nextAssignment?.date,
+                sessionDates: assignmentDatesAsync.whenOrNull(data: (d) => d) ?? {},
               ),
               const SizedBox(height: AppSpacing.sectionSpacing),
-            ],
-            if (territoryModels.isNotEmpty) ...[
-              Text(
-                'Territórios desta saída',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+              if (assignment != null) ...[
+                _SessionCard(
+                  assignment: assignment,
+                  meetingLocation: meetingLocation,
+                  selectedDate: normalizedDate,
+                  nextAssignmentDate: nextAssignment?.date,
+                ),
+                const SizedBox(height: AppSpacing.sectionSpacing),
+              ],
+              if (territoryModels.isNotEmpty) ...[
+                Text(
+                  'Territórios desta saída',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                ...territoryModels.map(
+                  (t) => Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                    child: _ExpandableTerritoryCard(
+                      territory: t,
+                      conductorId: user.id,
+                      assignedSegmentIds:
+                          assignment?.assignedSegmentsFor(t.id) ?? const [],
                     ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              ...territoryModels.map(
-                (t) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                  child: _ExpandableTerritoryCard(
-                    territory: t,
-                    conductorId: user.id,
                   ),
                 ),
-              ),
-            ] else ...[
-              AppCard(
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.assignment_outlined,
-                      size: 48,
-                      color: Theme.of(context).colorScheme.primary.withValues(
-                            alpha: 0.5,
-                          ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Text(
-                      assignment != null
-                          ? 'Nenhum território atribuído para esta saída'
-                          : 'Nenhuma saída agendada',
-                      style: Theme.of(context).textTheme.bodyLarge,
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+              ] else ...[
+                AppCard(
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.assignment_outlined,
+                        size: 48,
+                        color: Theme.of(context).colorScheme.primary.withValues(
+                              alpha: 0.5,
+                            ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Text(
+                        assignment != null
+                            ? 'Nenhum território atribuído para esta saída'
+                            : 'Nenhuma saída agendada',
+                        style: Theme.of(context).textTheme.bodyLarge,
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
             ],
           ),
         ),
@@ -362,10 +364,12 @@ class _ExpandableTerritoryCard extends ConsumerStatefulWidget {
   const _ExpandableTerritoryCard({
     required this.territory,
     required this.conductorId,
+    this.assignedSegmentIds = const [],
   });
 
   final TerritoryModel territory;
   final String conductorId;
+  final List<String> assignedSegmentIds;
 
   @override
   ConsumerState<_ExpandableTerritoryCard> createState() =>
@@ -375,15 +379,29 @@ class _ExpandableTerritoryCard extends ConsumerStatefulWidget {
 class _ExpandableTerritoryCardState extends ConsumerState<_ExpandableTerritoryCard> {
   bool _expanded = false;
   Set<String> _completedIds = {};
+  late final TextEditingController _notesController;
   bool _saving = false;
+
+  List<SegmentModel> get _sortedSegments {
+    final list = List<SegmentModel>.from(widget.territory.segments);
+    list.sort((a, b) => a.description.compareTo(b.description));
+    return list;
+  }
 
   @override
   void initState() {
     super.initState();
+    _notesController = TextEditingController();
     _completedIds = widget.territory.segments
         .where((s) => s.isCompleted)
         .map((s) => s.id)
         .toSet();
+  }
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
   }
 
   @override
@@ -397,15 +415,7 @@ class _ExpandableTerritoryCardState extends ConsumerState<_ExpandableTerritoryCa
     }
   }
 
-  Future<void> _toggleSegment(SegmentModel segment, bool value) async {
-    setState(() {
-      if (value) {
-        _completedIds.add(segment.id);
-      } else {
-        _completedIds.remove(segment.id);
-      }
-    });
-
+  Future<void> _saveExecution({bool showFeedback = true}) async {
     final statusBySegmentId = <String, SegmentStatus>{};
     for (final seg in widget.territory.segments) {
       statusBySegmentId[seg.id] =
@@ -419,14 +429,33 @@ class _ExpandableTerritoryCardState extends ConsumerState<_ExpandableTerritoryCa
           territoryId: widget.territory.id,
           conductorId: widget.conductorId,
           statusBySegmentId: statusBySegmentId,
+          notes: _notesController.text.trim(),
           skipInvalidate: true,
         );
 
-    // Don't invalidate here - it causes full-screen loading, unmounts the card,
-    // and resets scroll. Local state already shows the correct UI; pull-to-refresh
-    // will sync when the user wants fresh data.
     _saving = false;
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      if (showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Trabalho do dia registrado com sucesso'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _toggleSegment(SegmentModel segment, bool value) async {
+    setState(() {
+      if (value) {
+        _completedIds.add(segment.id);
+      } else {
+        _completedIds.remove(segment.id);
+      }
+    });
+    await _saveExecution(showFeedback: false);
   }
 
   void _showExpandedImage(BuildContext context, String? url) {
@@ -470,8 +499,10 @@ class _ExpandableTerritoryCardState extends ConsumerState<_ExpandableTerritoryCa
   @override
   Widget build(BuildContext context) {
     final territory = widget.territory;
-    final isDone = territory.segments.isNotEmpty &&
-        _completedIds.length == territory.segments.length;
+    final sortedSegments = _sortedSegments;
+    final assignedSet = widget.assignedSegmentIds.toSet();
+    final isDone = sortedSegments.isNotEmpty &&
+        _completedIds.length == sortedSegments.length;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -498,36 +529,36 @@ class _ExpandableTerritoryCardState extends ConsumerState<_ExpandableTerritoryCa
                   right: AppSpacing.sm,
                   child: isDone
                       ? Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm,
-                        vertical: AppSpacing.xs,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.successGreen,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.check_circle,
-                            color: Colors.white,
-                            size: 18,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.sm,
+                            vertical: AppSpacing.xs,
                           ),
-                          const SizedBox(width: AppSpacing.xs),
-                          Text(
-                            'Concluído',
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelMedium
-                                ?.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                          decoration: BoxDecoration(
+                            color: AppColors.successGreen,
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                        ],
-                      ),
-                    )
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.check_circle,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                              const SizedBox(width: AppSpacing.xs),
+                              Text(
+                                'Concluído',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelMedium
+                                    ?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        )
                       : const SizedBox.shrink(),
                 ),
               ],
@@ -584,23 +615,45 @@ class _ExpandableTerritoryCardState extends ConsumerState<_ExpandableTerritoryCa
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Ruas a cobrir',
+                    'Segmentos deste território',
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  ...territory.segments.map(
+                  ...sortedSegments.map(
                     (segment) => _SegmentCheckbox(
                       segment: segment,
                       isChecked: _completedIds.contains(segment.id),
+                      isAssignedToday: assignedSet.contains(segment.id),
                       onChanged: (value) => _toggleSegment(segment, value ?? false),
                       disabled: _saving,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  OutlinedButton.icon(
-                    onPressed: () => context.push('/territory/${territory.id}'),
-                    icon: const Icon(Icons.open_in_new, size: 18),
-                    label: const Text('Abrir território completo'),
+                  TextField(
+                    controller: _notesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Comentário / observação',
+                      hintText: 'Ex.: Fizemos 26A e 26B; o 26B ficou pela metade',
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _saving ? null : () => _saveExecution(),
+                          icon: const Icon(Icons.check, size: 18),
+                          label: const Text('Confirmar feito hoje'),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      OutlinedButton.icon(
+                        onPressed: () => context.push('/territory/${territory.id}'),
+                        icon: const Icon(Icons.open_in_new, size: 18),
+                        label: const Text('Detalhes'),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -617,12 +670,14 @@ class _SegmentCheckbox extends StatelessWidget {
     required this.segment,
     required this.isChecked,
     required this.onChanged,
+    this.isAssignedToday = false,
     this.disabled = false,
   });
 
   final SegmentModel segment;
   final bool isChecked;
   final ValueChanged<bool?> onChanged;
+  final bool isAssignedToday;
   final bool disabled;
 
   @override
@@ -645,14 +700,40 @@ class _SegmentCheckbox extends StatelessWidget {
             ),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
-              child: Text(
-                segment.description,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      decoration: isChecked ? TextDecoration.lineThrough : null,
-                      color: isChecked
-                          ? AppColors.secondaryText
-                          : AppColors.primaryText,
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      segment.description,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            decoration: isChecked ? TextDecoration.lineThrough : null,
+                            color: isChecked
+                                ? AppColors.secondaryText
+                                : AppColors.primaryText,
+                          ),
                     ),
+                  ),
+                  if (isAssignedToday) ...[
+                    const SizedBox(width: AppSpacing.sm),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryPurple.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Designado',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: AppColors.primaryPurple,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ],

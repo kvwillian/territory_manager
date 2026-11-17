@@ -72,24 +72,24 @@ function TerritoriesPageContent() {
   const [plannerTargetDate, setPlannerTargetDate] = useState<string | null>(null)
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] space-y-5 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-[1600px] space-y-4 px-3.5 py-4 sm:space-y-5 sm:px-6 sm:py-6 lg:px-8">
       {/* Contextual Page Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-indigo-soft text-indigo">
-            <MapPin size={22} />
+      <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-3.5">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-indigo-soft text-indigo sm:h-12 sm:w-12">
+            <MapPin size={20} className="sm:h-[22px] sm:w-[22px]" />
           </span>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-xl font-bold tracking-tight text-ink sm:text-2xl">
               {activeMeta.headerTitle}
             </h1>
-            <p className="mt-0.5 text-sm text-muted">{activeMeta.headerSubtitle}</p>
+            <p className="mt-0.5 text-xs text-muted sm:text-sm">{activeMeta.headerSubtitle}</p>
           </div>
         </div>
       </div>
 
       {/* 4-Tab Bar */}
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-line">
+      <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto border-b border-line">
         {TABS.map((tab) => {
           const Icon = tab.icon
           const isActive = tab.key === activeTabKey
@@ -98,7 +98,7 @@ function TerritoriesPageContent() {
               key={tab.key}
               type="button"
               onClick={() => navigate(tab.path)}
-              className={`-mb-px inline-flex items-center gap-2 rounded-t-xl border border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
+              className={`-mb-px inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-t-xl border border-b-2 px-3.5 py-2.5 text-sm font-semibold transition sm:px-4 ${
                 isActive
                   ? 'border-line border-b-indigo bg-white text-indigo shadow-[0_-1px_2px_rgba(15,23,42,0.03)]'
                   : 'border-transparent bg-transparent text-[#475569] hover:bg-white/60 hover:text-ink'
@@ -140,7 +140,12 @@ function TerritoriesPageContent() {
       ) : activeTabKey === 'territorios' ? (
         <TerritoriesCatalogTab />
       ) : activeTabKey === 'locais' ? (
-        <DepartureLocationsTab />
+        <DepartureLocationsTab
+          onOpenDateInPlanner={(isoDate) => {
+            setPlannerTargetDate(isoDate)
+            navigate('/territorios')
+          }}
+        />
       ) : (
         <TerritoryHistoryTab
           initialLocationFilter={historyLocationSeed}

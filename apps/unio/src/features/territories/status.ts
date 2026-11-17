@@ -4,10 +4,12 @@ import type {
   TerritoryAssignmentRecord,
   TerritoryRecord,
   TerritorySegmentRecord,
+  TerritorySegmentStatusItem,
   TerritoryStatusSnapshot,
   TerritoryTimelineEntry,
   TerritoryWorkStatus,
   WeekdayKey,
+  WorkSessionCompletionState,
   WorkSessionRecord,
 } from './types'
 
@@ -250,6 +252,25 @@ export function buildTerritoryTimeline(params: {
  * (`workSessions` + `segments`). Past `assignments` NEVER mark a territory as worked, recent,
  * or completed.
  */
+function stripTerritoryRawTokenToCode(rawToken: string, fallbackBase: string): ParsedTerritoryCode {
+  const cleaned = rawToken
+    .replace(/^parte\s+d[eo]\s+/i, '')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\bincompleto\b/gi, ' ')
+    .replace(/\bparte\b/gi, ' ')
+    .replace(/^com[eé]rcio\s+/i, '')
+    .replace(/[^\w\s]/g, ' ')
+    .trim()
+  const spacedMatch = cleaned.match(/^(\d+)\s+([A-Za-z])$/)
+  if (spacedMatch) {
+    return parseTerritoryCode(`${spacedMatch[1]}${spacedMatch[2]!.toUpperCase()}`)
+  }
+  if (/^[A-Za-z]$/.test(cleaned)) {
+    return parseTerritoryCode(`${fallbackBase}${cleaned.toUpperCase()}`)
+  }
+  return parseTerritoryCode(cleaned || fallbackBase)
+}
+
 export function computeTerritoryStatuses(params: {
   territories: TerritoryRecord[]
   segments: TerritorySegmentRecord[]
@@ -269,12 +290,25 @@ export function computeTerritoryStatuses(params: {
     recentWindowDays = RECENT_DAYS_WINDOW,
   } = params
 
-  // 1. Group segments by territory
+  // 1. Group segments and workSessions by territory
   const segmentsByTerritory = new Map<string, TerritorySegmentRecord[]>()
   for (const seg of segments) {
     const bucket = segmentsByTerritory.get(seg.territoryId)
     if (bucket) bucket.push(seg)
     else segmentsByTerritory.set(seg.territoryId, [seg])
+  }
+  for (const bucket of segmentsByTerritory.values()) {
+    bucket.sort((a, b) => compareTerritoryCodes(a.description, b.description))
+  }
+
+  const sessionsByTerritory = new Map<string, WorkSessionRecord[]>()
+  const sortedWorkSessions = [...workSessions].sort((a, b) => b.isoDate.localeCompare(a.isoDate))
+  for (const ws of sortedWorkSessions) {
+    const delta = diffIsoDays(ws.isoDate, referenceIsoDate)
+    if (delta < 0) continue
+    const bucket = sessionsByTerritory.get(ws.territoryId)
+    if (bucket) bucket.push(ws)
+    else sessionsByTerritory.set(ws.territoryId, [ws])
   }
 
   // 2. Compute EFFECTIVE WORK strictly from workSessions + segments (never from assignments!)
@@ -284,10 +318,16 @@ export function computeTerritoryStatuses(params: {
     daysSinceLastWork: number | null
     workCount: number
     latestCompletedSessionIso: string | null
-    lastWorkCompletionState: 'completed' | 'partial' | 'incomplete' | null
+    lastWorkCompletionState: WorkSessionCompletionState | null
     lastWorkNotes: string
     hasIncompleteWork: boolean
     effectiveCompletedIso: string | null
+    segmentItems: TerritorySegmentStatusItem[]
+    missingSegmentIds: string[]
+    missingSegmentCodes: string[]
+    completedSegmentCodes: string[]
+    completedSegmentsCount: number
+    totalSegmentsCount: number
   }
   const workByTerritory = new Map<string, WorkMeta>()
   for (const t of territories) {
@@ -301,10 +341,15 @@ export function computeTerritoryStatuses(params: {
       lastWorkNotes: '',
       hasIncompleteWork: false,
       effectiveCompletedIso: null,
+      segmentItems: [],
+      missingSegmentIds: [],
+      missingSegmentCodes: [],
+      completedSegmentCodes: [],
+      completedSegmentsCount: 0,
+      totalSegmentsCount: 0,
     })
   }
 
-  const sortedWorkSessions = [...workSessions].sort((a, b) => b.isoDate.localeCompare(a.isoDate))
   for (const ws of sortedWorkSessions) {
     const meta = workByTerritory.get(ws.territoryId)
     if (!meta) continue
@@ -331,6 +376,7 @@ export function computeTerritoryStatuses(params: {
   for (const t of territories) {
     const meta = workByTerritory.get(t.id)!
     const segs = segmentsByTerritory.get(t.id) ?? []
+    const tSessions = sessionsByTerritory.get(t.id) ?? []
     let latestSegWorkedIso: string | null = null
 
     for (const seg of segs) {
@@ -346,31 +392,203 @@ export function computeTerritoryStatuses(params: {
       }
     }
 
+    // Build unified segment definitions for this territory (from `segments` collection + part letters in `workSessions`)
+    const knownSegMap = new Map<
+      string,
+      { id: string; code: string; segRecord: TerritorySegmentRecord | null }
+    >()
+    for (const seg of segs) {
+      const parsedSeg = parseTerritoryCode(seg.description)
+      const normCode =
+        parsedSeg.partLabel && parsedSeg.baseNumber === t.baseNumber
+          ? parsedSeg.code
+          : seg.description.trim()
+      knownSegMap.set(normCode.toUpperCase(), {
+        id: seg.id,
+        code: normCode,
+        segRecord: seg,
+      })
+    }
+
+    // Also infer part segments (e.g. 03A, 03B) if `t` is a base territory and `workSessions` reference part letters
+    if (!t.partLabel) {
+      const lettersSeen = new Set<string>()
+      for (const ws of tSessions) {
+        if (!ws.territoryCodeRaw) continue
+        const parsedRaw = stripTerritoryRawTokenToCode(ws.territoryCodeRaw, t.baseNumber)
+        if (parsedRaw.partLabel && parsedRaw.baseNumber === t.baseNumber) {
+          lettersSeen.add(parsedRaw.partLabel.toUpperCase())
+        }
+      }
+      if (lettersSeen.size > 0) {
+        const alphabet = ['A', 'B', 'C', 'D']
+        let maxIdx = 1 // At least A and B when any letter is seen
+        for (const l of lettersSeen) {
+          const idx = alphabet.indexOf(l)
+          if (idx > maxIdx) maxIdx = idx
+        }
+        for (let i = 0; i <= maxIdx; i += 1) {
+          const code = `${t.baseNumber}${alphabet[i]}`
+          if (!knownSegMap.has(code.toUpperCase())) {
+            knownSegMap.set(code.toUpperCase(), {
+              id: `virtual-seg:${t.id}:${code}`,
+              code,
+              segRecord: null,
+            })
+          }
+        }
+      }
+    }
+
+    const knownSegList = [...knownSegMap.values()].sort((a, b) =>
+      compareTerritoryCodes(a.code, b.code),
+    )
+
+    if (knownSegList.length > 0) {
+      // Evaluate each segment's latest work date and state
+      const rawSegEvaluations = knownSegList.map((kSeg) => {
+        let lastIso: string | null = kSeg.segRecord?.lastWorkedIsoDate ?? null
+        let lastState: 'pending' | 'partial' | 'completed' =
+          kSeg.segRecord?.status === 'completed' ? 'completed' : 'pending'
+
+        // Check workSessions in chronological order (oldest -> newest) so newest wins
+        const chronological = [...tSessions].reverse()
+        for (const ws of chronological) {
+          const wsState = ws.completionState ?? 'completed'
+          const parsedRaw = ws.territoryCodeRaw
+            ? stripTerritoryRawTokenToCode(ws.territoryCodeRaw, t.baseNumber)
+            : null
+          const isWholeTerritorySession =
+            ws.segmentsWorked.length === 0 && (!parsedRaw || !parsedRaw.partLabel)
+          const matchesThisSeg =
+            isWholeTerritorySession ||
+            ws.segmentsWorked.includes(kSeg.id) ||
+            (parsedRaw?.partLabel &&
+              parsedRaw.code.toUpperCase() === kSeg.code.toUpperCase())
+
+          if (matchesThisSeg) {
+            if (!lastIso || ws.isoDate >= lastIso) {
+              lastIso = ws.isoDate
+              lastState =
+                wsState === 'partial' || wsState === 'incomplete'
+                  ? 'partial'
+                  : 'completed'
+            }
+          }
+        }
+
+        // If the segment document itself in Firestore was explicitly marked completed more recently
+        if (kSeg.segRecord?.status === 'completed') {
+          lastState = 'completed'
+        }
+
+        return {
+          id: kSeg.id,
+          code: kSeg.code,
+          lastWorkedIsoDate: lastIso,
+          rawState: lastState,
+        }
+      })
+
+      // Determine current cycle anchor across the territory's segments
+      let latestCycleSegIso: string | null = null
+      for (const ev of rawSegEvaluations) {
+        if (ev.lastWorkedIsoDate && (!latestCycleSegIso || ev.lastWorkedIsoDate > latestCycleSegIso)) {
+          latestCycleSegIso = ev.lastWorkedIsoDate
+        }
+      }
+
+      const cycleActive =
+        latestCycleSegIso !== null &&
+        diffIsoDays(latestCycleSegIso, referenceIsoDate) <= SIBLING_CYCLE_DAYS
+
+      const evaluatedItems: TerritorySegmentStatusItem[] = rawSegEvaluations.map((ev) => {
+        if (!cycleActive || !latestCycleSegIso) {
+          return {
+            id: ev.id,
+            code: ev.code,
+            status: ev.rawState === 'completed' ? 'completed' : 'pending',
+            lastWorkedIsoDate: ev.lastWorkedIsoDate,
+            isMissingInCycle: false,
+          }
+        }
+        const workedInCurrentCycle =
+          ev.lastWorkedIsoDate !== null &&
+          diffIsoDays(ev.lastWorkedIsoDate, latestCycleSegIso) <= 30
+
+        if (workedInCurrentCycle && ev.rawState === 'completed') {
+          return {
+            id: ev.id,
+            code: ev.code,
+            status: 'completed',
+            lastWorkedIsoDate: ev.lastWorkedIsoDate,
+            isMissingInCycle: false,
+          }
+        }
+        if (workedInCurrentCycle && ev.rawState === 'partial') {
+          return {
+            id: ev.id,
+            code: ev.code,
+            status: 'partial',
+            lastWorkedIsoDate: ev.lastWorkedIsoDate,
+            isMissingInCycle: true,
+          }
+        }
+        return {
+          id: ev.id,
+          code: ev.code,
+          status: 'pending',
+          lastWorkedIsoDate: ev.lastWorkedIsoDate,
+          isMissingInCycle: true,
+        }
+      })
+
+      const completedInCycle = evaluatedItems.filter((i) => i.status === 'completed')
+      const missingInCycle = evaluatedItems.filter((i) => i.status !== 'completed')
+      const hasMixedCycle =
+        completedInCycle.length > 0 && missingInCycle.length > 0
+
+      meta.segmentItems = evaluatedItems.map((item) => ({
+        ...item,
+        isMissingInCycle: hasMixedCycle ? item.status !== 'completed' : item.status === 'partial',
+      }))
+      meta.totalSegmentsCount = evaluatedItems.length
+      meta.completedSegmentsCount = completedInCycle.length
+
+      if (hasMixedCycle) {
+        meta.missingSegmentIds = missingInCycle.map((m) => m.id)
+        meta.missingSegmentCodes = missingInCycle.map((m) => m.code)
+        meta.completedSegmentCodes = completedInCycle.map((c) => c.code)
+      } else if (evaluatedItems.some((i) => i.status === 'partial')) {
+        const partials = evaluatedItems.filter((i) => i.status === 'partial')
+        meta.missingSegmentIds = partials.map((m) => m.id)
+        meta.missingSegmentCodes = partials.map((m) => m.code)
+        meta.completedSegmentCodes = completedInCycle.map((c) => c.code)
+      }
+    }
+
     const latestSessionIsIncomplete =
       (meta.lastWorkCompletionState === 'partial' ||
         meta.lastWorkCompletionState === 'incomplete') &&
       (!meta.latestCompletedSessionIso ||
         meta.latestCompletedSessionIso < (meta.lastWorkedIsoDate ?? ''))
 
-    meta.hasIncompleteWork = latestSessionIsIncomplete
+    meta.hasIncompleteWork =
+      latestSessionIsIncomplete || meta.missingSegmentCodes.length > 0
 
-    if (latestSessionIsIncomplete) {
-      // Latest execution was explicitly partial (`parte`) or `Incompleto` -> not completed in current cycle
+    if (meta.hasIncompleteWork) {
+      // Latest execution was partial (`parte`), `Incompleto`, or only a subset of segments were completed in the cycle
       meta.effectiveCompletedIso = null
-    } else if (segs.length > 0) {
-      const completedCount = segs.filter((s) => s.status === 'completed').length
-      if (completedCount === segs.length) {
-        // All segments completed -> territory fully worked
+    } else if (meta.totalSegmentsCount > 0) {
+      if (meta.completedSegmentsCount === meta.totalSegmentsCount) {
         meta.effectiveCompletedIso =
           meta.latestCompletedSessionIso ?? meta.lastWorkedIsoDate ?? latestSegWorkedIso
         if (meta.workCount === 0 && meta.effectiveCompletedIso) {
           meta.workCount = 1
         }
-      } else if (completedCount > 0) {
-        // Partially worked segments -> NOT yet fully completed
+      } else if (meta.completedSegmentsCount > 0) {
         meta.effectiveCompletedIso = null
       } else {
-        // 0 segments currently marked completed (e.g. reset after full cycle) -> rely on completed workSessions
         meta.effectiveCompletedIso = meta.latestCompletedSessionIso
       }
     } else {
@@ -431,11 +649,11 @@ export function computeTerritoryStatuses(params: {
   for (const t of territories) {
     const wMeta = workByTerritory.get(t.id)!
     const aMeta = assignByTerritory.get(t.id)!
-    const segs = segmentsByTerritory.get(t.id) ?? []
-    const totalSegments = segs.length
-    const completedSegments = segs.filter((s) => s.status === 'completed').length
+    const totalSegments = wMeta.totalSegmentsCount
+    const completedSegments = wMeta.completedSegmentsCount
     const hasPartialSegments =
-      totalSegments > 0 && completedSegments > 0 && completedSegments < totalSegments
+      (totalSegments > 0 && completedSegments > 0 && completedSegments < totalSegments) ||
+      wMeta.missingSegmentCodes.length > 0
 
     const groupKey = t.partLabel ? `${t.regionName.trim().toLowerCase()}::${t.baseNumber}` : ''
     const siblings = groupKey ? (siblingGroups.get(groupKey) ?? []) : []
@@ -510,6 +728,10 @@ export function computeTerritoryStatuses(params: {
       hasIncompleteWork: wMeta.hasIncompleteWork,
       lastWorkCompletionState: wMeta.lastWorkCompletionState,
       lastWorkNotes: wMeta.lastWorkNotes,
+      segmentItems: wMeta.segmentItems,
+      missingSegmentIds: wMeta.missingSegmentIds,
+      missingSegmentCodes: wMeta.missingSegmentCodes,
+      completedSegmentCodes: wMeta.completedSegmentCodes,
       siblingPartIds,
       pendingSiblingCompletion,
       waitingForSiblingCodes,

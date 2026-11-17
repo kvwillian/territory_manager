@@ -1,4 +1,5 @@
 import {
+  CalendarRange,
   Check,
   Copy,
   Home,
@@ -27,6 +28,7 @@ import type {
   WeekdayKey,
 } from '../types'
 import { ActiveSwitch, ConductorsMultiSelect } from './SharedPieces'
+import { WeekendDeparturesTab } from './WeekendDeparturesTab'
 
 const WEEKDAYS: WeekdayKey[] = [
   'monday',
@@ -73,7 +75,11 @@ export function summarizeAllowedByRegion(
   }
 }
 
-export function DepartureLocationsTab() {
+export function DepartureLocationsTab({
+  onOpenDateInPlanner,
+}: {
+  onOpenDateInPlanner?: (isoDate: string) => void
+}) {
   const {
     canManage,
     territories,
@@ -82,6 +88,7 @@ export function DepartureLocationsTab() {
     deleteRecurringDeparture,
   } = useTerritories()
 
+  const [subTab, setSubTab] = useState<'recurring' | 'weekend'>('recurring')
   const [dayFilter, setDayFilter] = useState<'' | WeekdayKey>('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
   const [drawerTarget, setDrawerTarget] = useState<
@@ -108,7 +115,41 @@ export function DepartureLocationsTab() {
 
   return (
     <div className="space-y-4">
-      {/* Top Toolbar */}
+      {/* Sub-tabs: Saídas recorrentes | Sábados e Domingos */}
+      <div className="inline-flex flex-wrap items-center gap-1 rounded-2xl border border-line bg-white p-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+        <button
+          type="button"
+          onClick={() => setSubTab('recurring')}
+          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition sm:text-sm ${
+            subTab === 'recurring'
+              ? 'bg-indigo text-white shadow-xs'
+              : 'text-muted hover:bg-[#F8FAFC] hover:text-ink'
+          }`}
+        >
+          <Home size={15} />
+          Saídas recorrentes
+        </button>
+        <button
+          type="button"
+          onClick={() => setSubTab('weekend')}
+          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition sm:text-sm ${
+            subTab === 'weekend'
+              ? 'bg-indigo text-white shadow-xs'
+              : 'text-muted hover:bg-[#F8FAFC] hover:text-ink'
+          }`}
+        >
+          <CalendarRange size={15} />
+          Sábados e Domingos
+        </button>
+      </div>
+
+      {subTab === 'weekend' ? (
+        <WeekendDeparturesTab
+          onOpenDateInPlanner={(isoDate) => onOpenDateInPlanner?.(isoDate)}
+        />
+      ) : (
+        <>
+          {/* Top Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2.5">
           <select
@@ -339,6 +380,8 @@ export function DepartureLocationsTab() {
           onClose={() => setDrawerTarget(null)}
         />
       ) : null}
+        </>
+      )}
     </div>
   )
 }

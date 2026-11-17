@@ -82,6 +82,8 @@ export type TerritorySnapshotItem = {
   code: string
   name: string
   regionName: string
+  assignedSegmentIds?: string[]
+  assignedSegmentCodes?: string[]
 }
 
 export type TerritoryAssignmentRecord = {
@@ -101,6 +103,7 @@ export type TerritoryAssignmentRecord = {
   conductorNames: string[]
   territoryIds: string[]
   territorySnapshots: TerritorySnapshotItem[]
+  assignedSegmentsByTerritory?: Record<string, string[]>
   notes: string
   updatedAtIso: string | null
 }
@@ -156,6 +159,14 @@ export type TerritoryTimelineEntry = {
   notes: string
 }
 
+export type TerritorySegmentStatusItem = {
+  id: string
+  code: string
+  status: 'pending' | 'partial' | 'completed'
+  lastWorkedIsoDate: string | null
+  isMissingInCycle: boolean
+}
+
 export type TerritoryStatusSnapshot = {
   territory: TerritoryRecord
   status: TerritoryWorkStatus
@@ -170,6 +181,11 @@ export type TerritoryStatusSnapshot = {
   hasIncompleteWork?: boolean
   lastWorkCompletionState?: WorkSessionCompletionState | null
   lastWorkNotes?: string
+  // Per-segment breakdown (from `segments` collection + `workSessions` part codes)
+  segmentItems?: TerritorySegmentStatusItem[]
+  missingSegmentIds?: string[]
+  missingSegmentCodes?: string[]
+  completedSegmentCodes?: string[]
   // Split territory sibling state (based strictly on effective work)
   siblingPartIds: string[]
   pendingSiblingCompletion: boolean

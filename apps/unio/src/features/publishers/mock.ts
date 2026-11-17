@@ -1,7 +1,7 @@
 export type MockGender = 'feminino' | 'masculino'
 export type MockStatus = 'active' | 'inactive'
-export type MockPrivilege = 'publisher' | 'ministerialServant' | 'elder'
-export type MockPioneer = 'none' | 'auxiliary' | 'regular'
+export type MockPrivilege = 'publisher' | 'ministerialServant' | 'elder' | 'circuitOverseer'
+export type MockPioneer = 'none' | 'auxiliary' | 'regular' | 'special'
 export type GroupTone = 'orange' | 'blue' | 'violet' | 'green' | 'pink'
 
 export type MockGroup = {

@@ -11,8 +11,9 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
+import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
 import { isoFromDate } from '../../domain/dates'
-import { auth, db, functions } from '../../firebase'
+import { auth, db, functions, storage } from '../../firebase'
 import { compareTerritories, compareTerritoryCodes, inferPeriodType, parseTerritoryCode } from './status'
 import type {
   DeparturePeriodType,
@@ -99,6 +100,29 @@ function asWeekday(value: unknown): WeekdayKey {
   return typeof value === 'string' && valid.includes(value as WeekdayKey)
     ? (value as WeekdayKey)
     : 'thursday'
+}
+
+function readLocalClearedWsIds(congregationId: string): string[] {
+  if (typeof window === 'undefined' || !window.localStorage) return []
+  try {
+    const raw = window.localStorage.getItem(`unio_cleared_ws_${congregationId}`)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as unknown
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === 'string')
+      : []
+  } catch {
+    return []
+  }
+}
+
+function writeLocalClearedWsIds(congregationId: string, ids: string[]): void {
+  if (typeof window === 'undefined' || !window.localStorage) return
+  try {
+    window.localStorage.setItem(`unio_cleared_ws_${congregationId}`, JSON.stringify(ids))
+  } catch {
+    // Ignore storage quota errors
+  }
 }
 
 export async function loadTerritoriesBundle(congregationId: string): Promise<LoadedTerritoriesBundle> {
@@ -197,17 +221,19 @@ export async function loadTerritoriesBundle(congregationId: string): Promise<Loa
   }
   regions.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
 
-  const segments: TerritorySegmentRecord[] = segmentsSnap.docs.map((snap) => {
-    const data = snap.data()
-    return {
-      id: snap.id,
-      congregationId,
-      territoryId: asString(data.territoryId),
-      description: asString(data.description),
-      status: data.status === 'completed' ? 'completed' : 'pending',
-      lastWorkedIsoDate: firestoreDateToIso(data.lastWorkedDate),
-    }
-  })
+  const segments: TerritorySegmentRecord[] = segmentsSnap.docs
+    .map((snap) => {
+      const data = snap.data()
+      return {
+        id: snap.id,
+        congregationId,
+        territoryId: asString(data.territoryId),
+        description: asString(data.description),
+        status: data.status === 'completed' ? ('completed' as const) : ('pending' as const),
+        lastWorkedIsoDate: firestoreDateToIso(data.lastWorkedDate),
+      }
+    })
+    .sort((a, b) => compareTerritoryCodes(a.description, b.description))
 
   const locations: MeetingLocationRecord[] = locationsSnap.docs
     .map((snap) => {
@@ -307,7 +333,18 @@ export async function loadTerritoriesBundle(congregationId: string): Promise<Loa
 
   const sessionById = new Map(recurringDepartures.map((s) => [s.id, s]))
 
+  const historyMetaDoc = assignmentsSnap.docs.find(
+    (snap) => snap.id === `history_meta_${congregationId}` || snap.data().kind === 'history_meta',
+  )
+  const clearedWorkSessionIds = new Set<string>([
+    ...(historyMetaDoc ? asStringArray(historyMetaDoc.data().clearedWorkSessionIds) : []),
+    ...readLocalClearedWsIds(congregationId),
+  ])
+
   const assignments: TerritoryAssignmentRecord[] = assignmentsSnap.docs
+    .filter(
+      (snap) => snap.id !== `history_meta_${congregationId}` && snap.data().kind !== 'history_meta',
+    )
     .map((snap) => {
       const data = snap.data()
       const isoDate =
@@ -346,6 +383,15 @@ export async function loadTerritoriesBundle(congregationId: string): Promise<Loa
         .filter((n): n is string => Boolean(n))
 
       const territoryIds = asStringArray(data.territoryIds)
+      const rawAssignedSegmentsMap =
+        data.assignedSegmentsByTerritory && typeof data.assignedSegmentsByTerritory === 'object'
+          ? (data.assignedSegmentsByTerritory as Record<string, unknown>)
+          : {}
+      const assignedSegmentsByTerritory: Record<string, string[]> = {}
+      for (const [k, v] of Object.entries(rawAssignedSegmentsMap)) {
+        assignedSegmentsByTerritory[k] = asStringArray(v)
+      }
+
       const rawSnapshots = Array.isArray(data.territorySnapshots) ? data.territorySnapshots : []
       const territorySnapshots: TerritorySnapshotItem[] =
         rawSnapshots.length > 0
@@ -356,11 +402,18 @@ export async function loadTerritoriesBundle(congregationId: string): Promise<Loa
                 const id = asString(rec.id)
                 if (!id) return null
                 const live = territoriesById.get(id)
+                const assignedSegmentIds = asStringArray(rec.assignedSegmentIds)
+                const assignedSegmentCodes = asStringArray(rec.assignedSegmentCodes)
+                if (assignedSegmentIds.length > 0 && !assignedSegmentsByTerritory[id]) {
+                  assignedSegmentsByTerritory[id] = assignedSegmentIds
+                }
                 return {
                   id,
                   code: asString(rec.code) || live?.code || id,
                   name: asString(rec.name) || live?.name || `Território ${id}`,
                   regionName: asString(rec.regionName) || live?.regionName || '',
+                  ...(assignedSegmentIds.length > 0 ? { assignedSegmentIds } : {}),
+                  ...(assignedSegmentCodes.length > 0 ? { assignedSegmentCodes } : {}),
                 }
               })
               .filter((x): x is TerritorySnapshotItem => x !== null)
@@ -400,6 +453,7 @@ export async function loadTerritoriesBundle(congregationId: string): Promise<Loa
         conductorNames: storedNames.length > 0 ? storedNames : fallbackNames,
         territoryIds: territorySnapshots.map((s) => s.id),
         territorySnapshots,
+        assignedSegmentsByTerritory,
         notes: asString(data.notes),
         updatedAtIso: firestoreDateToIso(data.updatedAt) ?? firestoreDateToIso(data.createdAt),
       }
@@ -407,6 +461,7 @@ export async function loadTerritoriesBundle(congregationId: string): Promise<Loa
     .sort((a, b) => b.isoDate.localeCompare(a.isoDate) || a.startTime.localeCompare(b.startTime))
 
   const workSessions: WorkSessionRecord[] = workSessionsSnap.docs
+    .filter((snap) => !clearedWorkSessionIds.has(snap.id))
     .map((snap) => {
       const data = snap.data()
       const conductorUserId = asString(data.conductorId)
@@ -537,6 +592,7 @@ export async function deleteRegionDoc(regionId: string): Promise<void> {
 export type CreateTerritoriesPayload = {
   congregationId: string
   codes: string[]
+  segmentParts?: string[]
   regionId: string | null
   regionName: string
   customLabelPrefix?: string
@@ -550,6 +606,7 @@ export async function createTerritoryDocs(payload: CreateTerritoriesPayload): Pr
   const {
     congregationId,
     codes,
+    segmentParts = [],
     regionId,
     regionName,
     customLabelPrefix,
@@ -603,6 +660,18 @@ export async function createTerritoryDocs(payload: CreateTerritoriesPayload): Pr
       createdAt: now,
       updatedAt: now,
     })
+
+    for (const part of segmentParts) {
+      const cleanPart = part.trim().toUpperCase()
+      if (!cleanPart) continue
+      const segRef = doc(collection(db, 'segments'))
+      batch.set(segRef, {
+        congregationId,
+        territoryId: ref.id,
+        description: `${parsed.baseNumber}${cleanPart}`,
+        status: 'pending',
+      })
+    }
 
     created.push({
       id: ref.id,
@@ -668,6 +737,124 @@ export async function deleteTerritoryDoc(
   }
   batch.delete(doc(db, 'territories', territoryId))
   await batch.commit()
+}
+
+export type EditableTerritorySegmentInput = {
+  id?: string
+  description: string
+  status: 'pending' | 'completed'
+  lastWorkedIsoDate?: string | null
+}
+
+export async function saveTerritorySegmentsDoc(params: {
+  congregationId: string
+  territoryId: string
+  existingSegments: TerritorySegmentRecord[]
+  segments: EditableTerritorySegmentInput[]
+}): Promise<void> {
+  const { congregationId, territoryId, existingSegments, segments } = params
+  const batch = writeBatch(db)
+  const existingById = new Map(existingSegments.map((s) => [s.id, s]))
+  const keptIds = new Set<string>()
+
+  for (const seg of segments) {
+    const cleanDesc = seg.description.trim()
+    if (!cleanDesc) continue
+
+    const isExisting = Boolean(seg.id && existingById.has(seg.id))
+    if (isExisting && seg.id) {
+      keptIds.add(seg.id)
+      const ref = doc(db, 'segments', seg.id)
+      batch.update(ref, {
+        description: cleanDesc,
+        status: seg.status,
+        lastWorkedDate:
+          seg.status === 'completed'
+            ? isoToNoonTimestamp(seg.lastWorkedIsoDate || isoFromDate(new Date()))
+            : null,
+      })
+    } else {
+      const ref = doc(collection(db, 'segments'))
+      batch.set(ref, {
+        congregationId,
+        territoryId,
+        description: cleanDesc,
+        status: seg.status,
+        ...(seg.status === 'completed'
+          ? {
+              lastWorkedDate: isoToNoonTimestamp(
+                seg.lastWorkedIsoDate || isoFromDate(new Date()),
+              ),
+            }
+          : {}),
+      })
+    }
+  }
+
+  for (const oldSeg of existingSegments) {
+    if (oldSeg.territoryId === territoryId && !keptIds.has(oldSeg.id)) {
+      batch.delete(doc(db, 'segments', oldSeg.id))
+    }
+  }
+
+  await batch.commit()
+}
+
+async function compressImageToDataUrl(file: File, maxDimension = 1280): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('Falha ao ler arquivo de imagem.'))
+    reader.onload = () => {
+      const img = new Image()
+      img.onerror = () => reject(new Error('Arquivo de imagem inválido.'))
+      img.onload = () => {
+        let width = img.width
+        let height = img.height
+        if (width > maxDimension || height > maxDimension) {
+          if (width >= height) {
+            height = Math.round((height * maxDimension) / width)
+            width = maxDimension
+          } else {
+            width = Math.round((width * maxDimension) / height)
+            height = maxDimension
+          }
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          reject(new Error('Canvas não suportado no navegador.'))
+          return
+        }
+        ctx.drawImage(img, 0, 0, width, height)
+        resolve(canvas.toDataURL('image/jpeg', 0.82))
+      }
+      img.src = String(reader.result)
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+export async function uploadTerritoryMapImage(params: {
+  congregationId: string
+  territoryId: string
+  file: File
+}): Promise<string> {
+  const { congregationId, territoryId, file } = params
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_') || 'mapa.jpg'
+  const path = `territories/${congregationId}/${territoryId || 'new'}/${Date.now()}_${safeName}`
+
+  try {
+    const fileRef = storageRef(storage, path)
+    await uploadBytes(fileRef, file, {
+      contentType: file.type || 'image/jpeg',
+    })
+    return await getDownloadURL(fileRef)
+  } catch {
+    // Fallback if Firebase Storage rules have not been deployed yet in the target project
+    return await compressImageToDataUrl(file)
+  }
 }
 
 export type SaveRecurringDeparturePayload = {
@@ -843,6 +1030,7 @@ export type SaveAssignmentPayload = {
   conductorNames: string[]
   territoryIds: string[]
   territorySnapshots: TerritorySnapshotItem[]
+  assignedSegmentsByTerritory?: Record<string, string[]>
   notes: string
 }
 
@@ -874,6 +1062,7 @@ export async function saveAssignmentDoc(payload: SaveAssignmentPayload): Promise
     conductorId: effectiveUserIds[0] ?? null,
     territoryIds: payload.territoryIds,
     territorySnapshots: payload.territorySnapshots,
+    assignedSegmentsByTerritory: payload.assignedSegmentsByTerritory ?? {},
     notes: payload.notes.trim(),
     updatedAt: now,
   }
@@ -891,10 +1080,75 @@ export async function deleteAssignmentDoc(assignmentId: string): Promise<void> {
   await deleteDoc(doc(db, 'assignments', assignmentId))
 }
 
+export type RecordTerritoryExecutionPayload = {
+  congregationId: string
+  territoryId: string
+  isoDate: string
+  conductorName: string
+  conductorUserId?: string | null
+  conductorPublisherId?: string | null
+  completedSegmentIds: string[]
+  pendingSegmentIds: string[]
+  completionState: WorkSessionCompletionState
+  notes: string
+  regionId?: string | null
+  regionName?: string
+  territoryCodeRaw?: string
+}
+
+export async function recordTerritoryExecutionDoc(
+  payload: RecordTerritoryExecutionPayload,
+): Promise<void> {
+  const currentUid = auth.currentUser?.uid ?? ''
+  const workedTimestamp = isoToNoonTimestamp(payload.isoDate)
+
+  // 1. Update segments statuses in Firestore
+  if (payload.completedSegmentIds.length > 0 || payload.pendingSegmentIds.length > 0) {
+    const segBatch = writeBatch(db)
+    for (const segId of payload.completedSegmentIds) {
+      if (segId.startsWith('part-seg:')) continue
+      segBatch.update(doc(db, 'segments', segId), {
+        status: 'completed',
+        lastWorkedDate: workedTimestamp,
+      })
+    }
+    for (const segId of payload.pendingSegmentIds) {
+      if (segId.startsWith('part-seg:')) continue
+      segBatch.update(doc(db, 'segments', segId), {
+        status: 'pending',
+        lastWorkedDate: null,
+      })
+    }
+    await segBatch.commit()
+  }
+
+  // 2. Create workSession document in Firestore
+  const wsRef = doc(collection(db, 'workSessions'))
+  await setDoc(wsRef, {
+    congregationId: payload.congregationId,
+    territoryId: payload.territoryId,
+    conductorId: currentUid || payload.conductorUserId || 'conductor',
+    conductorUserId: payload.conductorUserId || currentUid || null,
+    conductorPublisherId: payload.conductorPublisherId ?? null,
+    conductorName: payload.conductorName.trim(),
+    date: workedTimestamp,
+    isoDate: payload.isoDate,
+    segmentsWorked: payload.completedSegmentIds.filter((id) => !id.startsWith('part-seg:')),
+    completionState: payload.completionState,
+    regionId: payload.regionId ?? null,
+    regionName: payload.regionName ?? '',
+    territoryCodeRaw: payload.territoryCodeRaw ?? '',
+    notes: payload.notes.trim(),
+    createdAt: Timestamp.now(),
+  })
+}
+
 export type ImportHistoryWorkSessionWriteItem = {
   docId: string
   importSourceKey: string
   territoryId: string
+  territoryBaseNumber?: string | null
+  targetSegmentCode?: string | null
   conductorUserId: string | null
   conductorPublisherId: string | null
   conductorName: string
@@ -915,6 +1169,7 @@ export type ImportHistoryBatchResult = {
   importedCount: number
   duplicatesSkipped: number
   ignoredCount: number
+  segmentsLinkedCount?: number
 }
 
 export async function importHistoryWorkSessionsBatch(params: {
@@ -924,71 +1179,180 @@ export async function importHistoryWorkSessionsBatch(params: {
 }): Promise<ImportHistoryBatchResult> {
   const { congregationId, items, ignoredCount } = params
   if (items.length === 0) {
-    return { importedCount: 0, duplicatesSkipped: 0, ignoredCount }
+    return { importedCount: 0, duplicatesSkipped: 0, ignoredCount, segmentsLinkedCount: 0 }
   }
 
-  // 1. Try authorized backend Cloud Function first
-  try {
-    const callImport = httpsCallable<
-      {
-        congregationId: string
-        items: ImportHistoryWorkSessionWriteItem[]
-        ignoredCount: number
-      },
-      ImportHistoryBatchResult
-    >(functions, 'importTerritoryHistory')
-    const response = await callImport({
-      congregationId,
-      items,
-      ignoredCount,
-    })
-    if (response.data && typeof response.data.importedCount === 'number') {
-      return response.data
-    }
-  } catch (err) {
-    const code =
-      err && typeof err === 'object' && 'code' in err ? String((err as { code: unknown }).code) : ''
-    if (code.includes('permission-denied') || code.includes('unauthenticated')) {
-      throw err
-    }
-    // If function is not deployed yet in current environment, fall back to direct Firestore batch write
-  }
-
-  // 2. Fallback: Idempotent chunked Firestore writeBatch respecting security rules
   const currentUid = auth.currentUser?.uid ?? ''
-  const existingSnap = await getDocs(
-    query(collection(db, 'workSessions'), where('congregationId', '==', congregationId)),
+  const [existingSnap, assignMetaSnap, existingSegmentsSnap] = await Promise.all([
+    getDocs(query(collection(db, 'workSessions'), where('congregationId', '==', congregationId))),
+    getDocs(query(collection(db, 'assignments'), where('congregationId', '==', congregationId))),
+    getDocs(query(collection(db, 'segments'), where('congregationId', '==', congregationId))),
+  ])
+
+  const metaDoc = assignMetaSnap.docs.find(
+    (d) => d.id === `history_meta_${congregationId}` || d.data().kind === 'history_meta',
   )
-  const existingDocIds = new Set<string>()
-  const existingSourceKeys = new Set<string>()
+  const clearedIds = new Set<string>([
+    ...(metaDoc ? asStringArray(metaDoc.data().clearedWorkSessionIds) : []),
+    ...readLocalClearedWsIds(congregationId),
+  ])
+
+  const activeSourceKeys = new Set<string>()
   for (const docSnap of existingSnap.docs) {
-    existingDocIds.add(docSnap.id)
+    if (clearedIds.has(docSnap.id)) continue
     const d = docSnap.data()
     const key = asString(d.importSourceKey)
-    if (key) existingSourceKeys.add(key)
+    if (key) activeSourceKeys.add(key)
   }
 
-  const toCommit: Array<{ id: string; payload: Record<string, unknown> }> = []
-  let duplicatesSkipped = 0
-  const now = Timestamp.now()
+  // Index existing segments per territoryId -> normalized segment code (e.g. "26A")
+  type SegEntry = {
+    id: string
+    code: string
+    isNew: boolean
+    latestWorkedIso: string | null
+    latestCompletionState: WorkSessionCompletionState | null
+  }
+  const segsByTerritory = new Map<string, Map<string, SegEntry>>()
+  for (const sDoc of existingSegmentsSnap.docs) {
+    const d = sDoc.data()
+    const tid = asString(d.territoryId)
+    const desc = asString(d.description).trim().toUpperCase()
+    if (!tid || !desc) continue
+    let map = segsByTerritory.get(tid)
+    if (!map) {
+      map = new Map()
+      segsByTerritory.set(tid, map)
+    }
+    map.set(desc, {
+      id: sDoc.id,
+      code: desc,
+      isNew: false,
+      latestWorkedIso: firestoreDateToIso(d.lastWorkedDate),
+      latestCompletionState: d.status === 'completed' ? 'completed' : null,
+    })
+  }
 
+  // Filter non-duplicate items first
+  const nonDuplicateItems: ImportHistoryWorkSessionWriteItem[] = []
+  let duplicatesSkipped = 0
   for (const item of items) {
-    if (
-      existingDocIds.has(item.docId) ||
-      existingSourceKeys.has(item.importSourceKey)
-    ) {
+    if (activeSourceKeys.has(item.importSourceKey)) {
       duplicatesSkipped += 1
       continue
     }
-    existingDocIds.add(item.docId)
-    existingSourceKeys.add(item.importSourceKey)
+    activeSourceKeys.add(item.importSourceKey)
+    nonDuplicateItems.push(item)
+  }
 
-    toCommit.push({
-      id: item.docId,
+  // Ensure segment records exist for any territory that has segmented items (e.g. 03B -> ensures 03A, 03B)
+  const maxLetterIdxByTerritory = new Map<string, { base: string; maxIdx: number }>()
+  for (const [tid, map] of segsByTerritory.entries()) {
+    for (const segCode of map.keys()) {
+      const parsed = parseTerritoryCode(segCode)
+      if (parsed.partLabel && /^[A-F]$/.test(parsed.partLabel)) {
+        const idx = parsed.partLabel.charCodeAt(0) - 65
+        const prev = maxLetterIdxByTerritory.get(tid)
+        if (!prev || idx > prev.maxIdx) {
+          maxLetterIdxByTerritory.set(tid, { base: parsed.baseNumber, maxIdx: idx })
+        }
+      }
+    }
+  }
+
+  for (const item of nonDuplicateItems) {
+    const rawSeg = item.targetSegmentCode?.trim().toUpperCase() || ''
+    if (!rawSeg) continue
+    const parsed = parseTerritoryCode(rawSeg)
+    const base = item.territoryBaseNumber || parsed.baseNumber
+    if (parsed.partLabel && /^[A-F]$/.test(parsed.partLabel)) {
+      const idx = parsed.partLabel.charCodeAt(0) - 65
+      const effectiveIdx = Math.max(1, idx) // At least A and B when segmented
+      const prev = maxLetterIdxByTerritory.get(item.territoryId)
+      if (!prev || effectiveIdx > prev.maxIdx) {
+        maxLetterIdxByTerritory.set(item.territoryId, { base, maxIdx: effectiveIdx })
+      }
+    }
+  }
+
+  // Populate missing A..maxIdx segments in memory (and mark for creation in Firestore)
+  for (const [tid, { base, maxIdx }] of maxLetterIdxByTerritory.entries()) {
+    let map = segsByTerritory.get(tid)
+    if (!map) {
+      map = new Map()
+      segsByTerritory.set(tid, map)
+    }
+    for (let i = 0; i <= maxIdx; i += 1) {
+      const letter = String.fromCharCode(65 + i)
+      const segCode = `${base}${letter}`
+      if (!map.has(segCode)) {
+        map.set(segCode, {
+          id: doc(collection(db, 'segments')).id,
+          code: segCode,
+          isNew: true,
+          latestWorkedIso: null,
+          latestCompletionState: null,
+        })
+      }
+    }
+  }
+
+  const toCommitWs: Array<{ id: string; payload: Record<string, unknown> }> = []
+  const touchedSegs = new Map<string, { territoryId: string; entry: SegEntry }>()
+  let segmentsLinkedCount = 0
+  const now = Timestamp.now()
+
+  for (const item of nonDuplicateItems) {
+    const rawSeg = item.targetSegmentCode?.trim().toUpperCase() || ''
+    const segmentsWorked: string[] = []
+
+    if (rawSeg) {
+      let map = segsByTerritory.get(item.territoryId)
+      if (!map) {
+        map = new Map()
+        segsByTerritory.set(item.territoryId, map)
+      }
+      let segEntry = map.get(rawSeg)
+      if (!segEntry) {
+        segEntry = {
+          id: doc(collection(db, 'segments')).id,
+          code: rawSeg,
+          isNew: true,
+          latestWorkedIso: null,
+          latestCompletionState: null,
+        }
+        map.set(rawSeg, segEntry)
+      }
+      segmentsWorked.push(segEntry.id)
+      segmentsLinkedCount += 1
+
+      if (!segEntry.latestWorkedIso || item.isoDate >= segEntry.latestWorkedIso) {
+        segEntry.latestWorkedIso = item.isoDate
+        segEntry.latestCompletionState = item.completionState
+      }
+      touchedSegs.set(segEntry.id, { territoryId: item.territoryId, entry: segEntry })
+    }
+
+    // Also include any newly generated sibling segments (e.g. 03A when 03B was imported) so the territory has its full segment set
+    const mapForTerr = segsByTerritory.get(item.territoryId)
+    if (mapForTerr) {
+      for (const entry of mapForTerr.values()) {
+        if (entry.isNew) {
+          touchedSegs.set(entry.id, { territoryId: item.territoryId, entry })
+        }
+      }
+    }
+
+    const newDocId = doc(collection(db, 'workSessions')).id
+    const effectiveRawCode = rawSeg || item.territoryCodeRaw
+
+    toCommitWs.push({
+      id: newDocId,
       payload: {
         congregationId,
         territoryId: item.territoryId,
-        conductorId: item.conductorUserId || currentUid || 'historical-import',
+        conductorId: currentUid || item.conductorUserId || 'historical-import',
+        conductorUserId: item.conductorUserId || currentUid || null,
         conductorPublisherId: item.conductorPublisherId,
         conductorName: item.conductorName,
         conductorRaw: item.conductorRaw,
@@ -996,12 +1360,12 @@ export async function importHistoryWorkSessionsBatch(params: {
         isoDate: item.isoDate,
         dateEndIso: item.dateEndIso,
         dateNote: item.dateNote,
-        segmentsWorked: [],
+        segmentsWorked,
         completionState: item.completionState,
         periodType: item.periodType,
         regionId: item.regionId,
         regionName: item.regionName,
-        territoryCodeRaw: item.territoryCodeRaw,
+        territoryCodeRaw: effectiveRawCode,
         raw: item.raw,
         notes: item.notes,
         importSourceKey: item.importSourceKey,
@@ -1011,18 +1375,214 @@ export async function importHistoryWorkSessionsBatch(params: {
     })
   }
 
+  // Commit segment creations / updates first
+  const segOps = [...touchedSegs.values()]
   const chunkSize = 400
-  for (let i = 0; i < toCommit.length; i += chunkSize) {
+  for (let i = 0; i < segOps.length; i += chunkSize) {
     const batch = writeBatch(db)
-    for (const op of toCommit.slice(i, i + chunkSize)) {
+    for (const { territoryId, entry } of segOps.slice(i, i + chunkSize)) {
+      const segRef = doc(db, 'segments', entry.id)
+      const isCompleted = entry.latestCompletionState === 'completed' && Boolean(entry.latestWorkedIso)
+      if (entry.isNew) {
+        batch.set(segRef, {
+          congregationId,
+          territoryId,
+          description: entry.code,
+          status: isCompleted ? 'completed' : 'pending',
+          ...(entry.latestWorkedIso
+            ? { lastWorkedDate: isoToNoonTimestamp(entry.latestWorkedIso) }
+            : {}),
+        })
+      } else if (entry.latestWorkedIso) {
+        batch.update(segRef, {
+          status: isCompleted ? 'completed' : 'pending',
+          lastWorkedDate: isoToNoonTimestamp(entry.latestWorkedIso),
+        })
+      }
+    }
+    await batch.commit()
+  }
+
+  // Commit workSessions
+  for (let i = 0; i < toCommitWs.length; i += chunkSize) {
+    const batch = writeBatch(db)
+    for (const op of toCommitWs.slice(i, i + chunkSize)) {
       batch.set(doc(db, 'workSessions', op.id), op.payload)
     }
     await batch.commit()
   }
 
   return {
-    importedCount: toCommit.length,
+    importedCount: toCommitWs.length,
     duplicatesSkipped,
     ignoredCount,
+    segmentsLinkedCount,
+  }
+}
+
+export type ClearTerritoryHistoryResult = {
+  deletedCount: number
+  segmentsResetCount: number
+}
+
+export async function clearTerritoryHistoryBatch(params: {
+  congregationId: string
+  clearWorkSessions?: boolean
+  clearAssignments?: boolean
+  resetSegments?: boolean
+  workSessionIds?: string[]
+  assignmentIds?: string[]
+}): Promise<ClearTerritoryHistoryResult> {
+  const {
+    congregationId,
+    clearWorkSessions = true,
+    clearAssignments = false,
+    resetSegments = true,
+    workSessionIds,
+    assignmentIds,
+  } = params
+
+  // 1. Try authorized Cloud Function first
+  try {
+    const callClear = httpsCallable<typeof params, ClearTerritoryHistoryResult>(
+      functions,
+      'clearTerritoryHistory',
+    )
+    const response = await callClear({
+      congregationId,
+      clearWorkSessions,
+      clearAssignments,
+      resetSegments,
+      workSessionIds,
+      assignmentIds,
+    })
+    if (response.data && typeof response.data.deletedCount === 'number') {
+      return response.data
+    }
+  } catch {
+    // Fall back to client-side cleanup if Cloud Function is not deployed or lacks rules
+  }
+
+  // 2. Fallback: Client-side Firestore cleanup compatible with live security rules
+  const wsFilter = workSessionIds ? new Set(workSessionIds) : null
+  const assignFilter = assignmentIds ? new Set(assignmentIds) : null
+  const wsDeleteIds: string[] = []
+  const assignDeleteIds: string[] = []
+  const resetSegmentIds: string[] = []
+  const metaDocId = `history_meta_${congregationId}`
+
+  const assignSnap = await getDocs(
+    query(collection(db, 'assignments'), where('congregationId', '==', congregationId)),
+  )
+  const existingMetaDoc = assignSnap.docs.find(
+    (d) => d.id === metaDocId || d.data().kind === 'history_meta',
+  )
+  const alreadyClearedWsIds = new Set<string>([
+    ...(existingMetaDoc ? asStringArray(existingMetaDoc.data().clearedWorkSessionIds) : []),
+    ...readLocalClearedWsIds(congregationId),
+  ])
+
+  if (clearWorkSessions) {
+    const wsSnap = await getDocs(
+      query(collection(db, 'workSessions'), where('congregationId', '==', congregationId)),
+    )
+    for (const d of wsSnap.docs) {
+      if (alreadyClearedWsIds.has(d.id)) continue
+      if (!wsFilter || wsFilter.has(d.id)) {
+        wsDeleteIds.push(d.id)
+      }
+    }
+  }
+
+  if (clearAssignments) {
+    for (const d of assignSnap.docs) {
+      if (d.id === metaDocId || d.data().kind === 'history_meta') continue
+      if (!assignFilter || assignFilter.has(d.id)) {
+        assignDeleteIds.push(d.id)
+      }
+    }
+  }
+
+  if (resetSegments) {
+    const segSnap = await getDocs(
+      query(collection(db, 'segments'), where('congregationId', '==', congregationId)),
+    )
+    for (const d of segSnap.docs) {
+      resetSegmentIds.push(d.id)
+    }
+  }
+
+  const chunkSize = 400
+
+  // 2a. Clear workSessions (try physical delete; if blocked by `allow delete: if false` on workSessions, tombstone in assignments/history_meta + localStorage)
+  if (wsDeleteIds.length > 0) {
+    try {
+      for (let i = 0; i < wsDeleteIds.length; i += chunkSize) {
+        const batch = writeBatch(db)
+        for (const wsId of wsDeleteIds.slice(i, i + chunkSize)) {
+          batch.delete(doc(db, 'workSessions', wsId))
+        }
+        await batch.commit()
+      }
+    } catch {
+      const mergedClearedIds = [...new Set([...alreadyClearedWsIds, ...wsDeleteIds])]
+      writeLocalClearedWsIds(congregationId, mergedClearedIds)
+      try {
+        const metaRef = doc(db, 'assignments', existingMetaDoc?.id ?? metaDocId)
+        const metaPayload = {
+          congregationId,
+          kind: 'history_meta',
+          status: 'draft',
+          territoryIds: [],
+          clearedWorkSessionIds: mergedClearedIds,
+          updatedAt: Timestamp.now(),
+        }
+        if (existingMetaDoc) {
+          await updateDoc(metaRef, metaPayload)
+        } else {
+          await setDoc(metaRef, { ...metaPayload, createdAt: Timestamp.now() })
+        }
+      } catch {
+        // Local storage fallback already persisted
+      }
+    }
+  }
+
+  // 2b. Clear assignments
+  if (assignDeleteIds.length > 0) {
+    try {
+      for (let i = 0; i < assignDeleteIds.length; i += chunkSize) {
+        const batch = writeBatch(db)
+        for (const aId of assignDeleteIds.slice(i, i + chunkSize)) {
+          batch.delete(doc(db, 'assignments', aId))
+        }
+        await batch.commit()
+      }
+    } catch {
+      // Ignore if restricted
+    }
+  }
+
+  // 2c. Reset segments
+  if (resetSegmentIds.length > 0) {
+    try {
+      for (let i = 0; i < resetSegmentIds.length; i += chunkSize) {
+        const batch = writeBatch(db)
+        for (const segId of resetSegmentIds.slice(i, i + chunkSize)) {
+          batch.update(doc(db, 'segments', segId), {
+            status: 'pending',
+            lastWorkedDate: null,
+          })
+        }
+        await batch.commit()
+      }
+    } catch {
+      // Ignore if segments update is restricted for non-admin
+    }
+  }
+
+  return {
+    deletedCount: wsDeleteIds.length + assignDeleteIds.length,
+    segmentsResetCount: resetSegmentIds.length,
   }
 }

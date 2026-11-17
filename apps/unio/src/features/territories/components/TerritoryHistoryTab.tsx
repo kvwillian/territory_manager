@@ -1,6 +1,7 @@
-import { Check, Copy, Eye, FileJson, History, RotateCcw, X } from 'lucide-react'
+import { AlertTriangle, Check, Copy, Download, Eye, FileJson, History, RotateCcw, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { addDays, isoFromDate } from '../../../domain/dates'
+import { buildTerritoryHistoryCsv } from '../historyExportCsv'
 import {
   buildTerritoryTimeline,
   formatFullDateBr,
@@ -25,7 +26,15 @@ export function TerritoryHistoryTab({
   initialLocationFilter?: string
   onOpenDateInPlanner?: (isoDate: string) => void
 }) {
-  const { regions, territories, assignments, workSessions } = useTerritories()
+  const {
+    canManage,
+    regions,
+    territories,
+    segments,
+    assignments,
+    workSessions,
+    clearHistory,
+  } = useTerritories()
 
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('30d')
   const [customFrom, setCustomFrom] = useState('')
@@ -36,6 +45,13 @@ export function TerritoryHistoryTab({
   const [territoryFilter, setTerritoryFilter] = useState('')
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
   const [importModalOpen, setImportModalOpen] = useState(false)
+  const [clearModalOpen, setClearModalOpen] = useState(false)
+  const [clearWorkSessionsChecked, setClearWorkSessionsChecked] = useState(true)
+  const [clearAssignmentsChecked, setClearAssignmentsChecked] = useState(false)
+  const [resetSegmentsChecked, setResetSegmentsChecked] = useState(true)
+  const [clearingBusy, setClearingBusy] = useState(false)
+  const [clearBannerMsg, setClearBannerMsg] = useState('')
+  const [clearErrorMsg, setClearErrorMsg] = useState('')
 
   useEffect(() => {
     if (initialLocationFilter) {
@@ -53,6 +69,16 @@ export function TerritoryHistoryTab({
   const assignmentsById = useMemo(
     () => new Map(assignments.map((a) => [a.id, a])),
     [assignments],
+  )
+
+  const segmentsById = useMemo(
+    () => new Map(segments.map((s) => [s.id, s])),
+    [segments],
+  )
+
+  const workSessionsById = useMemo(
+    () => new Map(workSessions.map((ws) => [ws.id, ws])),
+    [workSessions],
   )
 
   const allHistory = useMemo(
@@ -164,8 +190,64 @@ export function TerritoryHistoryTab({
       ? (assignmentsById.get(selectedEntry.id) ?? null)
       : null
 
+  async function handleConfirmClearHistory() {
+    setClearingBusy(true)
+    setClearErrorMsg('')
+    try {
+      const res = await clearHistory({
+        clearWorkSessions: clearWorkSessionsChecked,
+        clearAssignments: clearAssignmentsChecked,
+        resetSegments: resetSegmentsChecked,
+      })
+      setClearModalOpen(false)
+      setSelectedEntryId(null)
+      setClearBannerMsg(
+        `Histórico limpo com sucesso: ${res.deletedCount} registro(s) removido(s)${
+          res.segmentsResetCount > 0
+            ? ` e ${res.segmentsResetCount} segmento(s) redefinido(s)`
+            : ''
+        }.`,
+      )
+      setTimeout(() => setClearBannerMsg(''), 5000)
+    } catch (err) {
+      setClearErrorMsg(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Não foi possível limpar o histórico.',
+      )
+    } finally {
+      setClearingBusy(false)
+    }
+  }
+
+  function handleExportCsv() {
+    const csv = buildTerritoryHistoryCsv({
+      entries: filteredRows,
+      territoriesById,
+      segmentsById,
+      assignmentsById,
+      workSessionsById,
+    })
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `historico_territorios_${todayIso}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="space-y-4">
+      {clearBannerMsg ? (
+        <div className="flex items-center justify-between rounded-2xl border border-[#BBF7D0] bg-[#F0FDF4] px-4 py-3 text-xs font-semibold text-[#166534]">
+          <span>{clearBannerMsg}</span>
+          <button type="button" onClick={() => setClearBannerMsg('')}>
+            <X size={15} />
+          </button>
+        </div>
+      ) : null}
+
       {/* Filters Card */}
       <div className="rounded-2xl border border-line bg-white p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
@@ -175,14 +257,38 @@ export function TerritoryHistoryTab({
               {filteredRows.length === 1 ? 'registro' : 'registros'})
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => setImportModalOpen(true)}
-            className="inline-flex h-9 items-center gap-2 rounded-xl bg-indigo px-4 text-xs font-semibold text-white shadow-xs transition hover:bg-indigo/90"
-          >
-            <FileJson size={15} />
-            Importar histórico
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {canManage && allHistory.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setClearErrorMsg('')
+                  setClearModalOpen(true)
+                }}
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#FECACA] bg-[#FEF2F2] px-3.5 text-xs font-semibold text-[#B91C1C] transition hover:bg-[#FEE2E2]"
+              >
+                <Trash2 size={14} />
+                Limpar histórico
+              </button>
+            ) : null}
+            <button
+              type="button"
+              disabled={filteredRows.length === 0}
+              onClick={handleExportCsv}
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-line bg-white px-3.5 text-xs font-semibold text-ink transition hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download size={14} />
+              Exportar CSV
+            </button>
+            <button
+              type="button"
+              onClick={() => setImportModalOpen(true)}
+              className="inline-flex h-9 items-center gap-2 rounded-xl bg-indigo px-4 text-xs font-semibold text-white shadow-xs transition hover:bg-indigo/90"
+            >
+              <FileJson size={15} />
+              Importar histórico
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -442,6 +548,118 @@ export function TerritoryHistoryTab({
           onClose={() => setImportModalOpen(false)}
           onImportedSuccess={() => setPeriodPreset('all')}
         />
+      ) : null}
+
+      {/* Clear History Confirmation Modal */}
+      {clearModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-[2px]">
+          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-line bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-line px-6 py-4">
+              <div className="flex items-center gap-2.5">
+                <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#FEF2F2] text-[#DC2626]">
+                  <AlertTriangle size={18} />
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-ink">Limpar histórico</h3>
+                  <p className="text-[11px] text-muted">
+                    Escolha quais registros do histórico deseja remover.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setClearModalOpen(false)}
+                className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-[#F3F5FB]"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-3 p-6 text-xs">
+              {clearErrorMsg ? (
+                <div className="rounded-xl border border-[#FECACA] bg-[#FEF2F2] p-3 text-[#991B1B]">
+                  {clearErrorMsg}
+                </div>
+              ) : null}
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-[#F8FAFC] p-3.5">
+                <input
+                  type="checkbox"
+                  checked={clearWorkSessionsChecked}
+                  onChange={(e) => setClearWorkSessionsChecked(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-[#DC2626]"
+                />
+                <div>
+                  <span className="block font-semibold text-ink">
+                    Sessões de execução / histórico importado ({workSessions.length})
+                  </span>
+                  <span className="mt-0.5 block text-muted">
+                    Remove os registros de trabalho em campo (<code className="font-mono">workSessions</code>).
+                  </span>
+                </div>
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-[#F8FAFC] p-3.5">
+                <input
+                  type="checkbox"
+                  checked={resetSegmentsChecked}
+                  onChange={(e) => setResetSegmentsChecked(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-[#DC2626]"
+                />
+                <div>
+                  <span className="block font-semibold text-ink">
+                    Redefinir progresso dos segmentos para pendente
+                  </span>
+                  <span className="mt-0.5 block text-muted">
+                    Marca os segmentos dos territórios novamente como disponíveis/pendentes.
+                  </span>
+                </div>
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-[#F8FAFC] p-3.5">
+                <input
+                  type="checkbox"
+                  checked={clearAssignmentsChecked}
+                  onChange={(e) => setClearAssignmentsChecked(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-[#DC2626]"
+                />
+                <div>
+                  <span className="block font-semibold text-ink">
+                    Designações salvas ({assignments.length})
+                  </span>
+                  <span className="mt-0.5 block text-muted">
+                    Remove também as saídas planejadas na aba Designações (<code className="font-mono">assignments</code>).
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 border-t border-line bg-[#F8FAFC] px-6 py-4">
+              <button
+                type="button"
+                disabled={clearingBusy}
+                onClick={() => setClearModalOpen(false)}
+                className="h-9 rounded-xl border border-line bg-white px-4 text-xs font-semibold text-ink hover:bg-[#F1F5F9]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={
+                  clearingBusy ||
+                  (!clearWorkSessionsChecked &&
+                    !clearAssignmentsChecked &&
+                    !resetSegmentsChecked)
+                }
+                onClick={() => void handleConfirmClearHistory()}
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#DC2626] px-4 text-xs font-semibold text-white hover:bg-[#B91C1C] disabled:opacity-50"
+              >
+                <Trash2 size={14} />
+                {clearingBusy ? 'Limpando...' : 'Confirmar limpeza'}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   )

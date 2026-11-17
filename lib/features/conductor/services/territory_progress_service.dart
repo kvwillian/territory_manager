@@ -42,13 +42,23 @@ class TerritoryProgressService {
         .map((e) => e.key)
         .toList();
 
+    final allCompleted = statusBySegmentId.isNotEmpty &&
+        segmentsWorked.length == statusBySegmentId.length;
+    final cleanNotes = notes?.trim();
+    final notesIndicatePartial = cleanNotes != null &&
+        RegExp(r'\b(parte|metade|parcial|incompleto|falta)\b', caseSensitive: false)
+            .hasMatch(cleanNotes);
+    final completionState =
+        (!allCompleted || notesIndicatePartial) ? 'partial' : 'completed';
+
     final workSession = WorkSessionModel(
       id: '',
       territoryId: territoryId,
       conductorId: conductorId,
       date: DateTime.now(),
       segmentsWorked: segmentsWorked,
-      notes: notes,
+      completionState: completionState,
+      notes: (cleanNotes != null && cleanNotes.isNotEmpty) ? cleanNotes : null,
     );
 
     if (kIsWeb) {
@@ -63,12 +73,11 @@ class TerritoryProgressService {
     if (online && db != null) {
       await segmentRepo.syncSegmentStatuses(territoryId, statusBySegmentId);
       await workSessionRepo.createWorkSession(workSession);
-      // Update local cache so reads reflect the change
       final local = LocalRepository(db);
       final statusMap =
           statusBySegmentId.map((k, v) => MapEntry(k, v.name));
       await local.updateSegmentStatuses(territoryId, statusMap);
-      syncService.processSyncQueue(); // Push any pending from previous offline
+      syncService.processSyncQueue();
       if (!skipInvalidate) _ref.invalidate(territoriesProvider);
       return;
     }
@@ -80,7 +89,7 @@ class TerritoryProgressService {
       await local.updateSegmentStatuses(territoryId, statusMap);
       await syncService.queueSyncSegmentStatuses(territoryId, statusBySegmentId);
       await syncService.queueCreateWorkSession(workSession);
-      syncService.processSyncQueue(); // Push when back online
+      syncService.processSyncQueue();
       if (!skipInvalidate) _ref.invalidate(territoriesProvider);
     }
   }

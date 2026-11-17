@@ -80,10 +80,10 @@ export function MeetingsPage() {
   const [importing, setImporting] = useState(false)
 
   return (
-    <div className="px-6 py-6 lg:px-8">
+    <div className="px-3.5 py-4 sm:px-6 sm:py-6 lg:px-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-[28px] font-semibold tracking-tight">{meta.title}</h1>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">{meta.title}</h1>
           <p className="mt-1 text-sm text-muted">{meta.subtitle}</p>
           {store.saveError ? <p className="mt-2 text-sm text-[#9F1239]">{store.saveError}</p> : null}
         </div>

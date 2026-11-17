@@ -4,7 +4,9 @@ import { resolve } from 'node:path'
 import { test } from 'node:test'
 import {
   buildHistoryImportPreview,
+  isSameHistoryRegion,
   matchHistoryConductor,
+  matchHistoryTerritory,
   parseHistoryConductorRaw,
   parseHistoryTerritoryTokens,
   validateTerritoryHistoryJson,
@@ -26,6 +28,7 @@ import type {
   WorkSessionRecord,
 } from '../src/features/territories/types.ts'
 import { buildTerritoryWhatsappMessage } from '../src/features/territories/whatsapp.ts'
+import { buildTerritoryHistoryCsv } from '../src/features/territories/historyExportCsv.ts'
 
 function mkTerritory(id: string, code: string, regionName = 'Laranjeiras'): TerritoryRecord {
   const parsed = parseTerritoryCode(code)
@@ -475,6 +478,7 @@ test('validates historico_territorios_2026.json, enforces idempotency, and feeds
   if (!validated.ok) return
 
   assert.equal(validated.data.schemaVersion, '1.0')
+  assert.equal(validated.data.updatedThrough, '2026-11-15')
   assert.equal(validated.data.regions.length, 2)
 
   const territories: TerritoryRecord[] = [
@@ -502,9 +506,10 @@ test('validates historico_territorios_2026.json, enforces idempotency, and feeds
     existingWorkSessions: [],
   })
 
-  // 64 entries in Guaíba + 76 in Laranjeiras = 140 entries
-  assert.equal(firstPreview.summary.totalEntries, 140)
-  assert.ok(firstPreview.summary.partialOrIncompleteCount >= 9)
+  // 70 entries in Guaíba + 86 in Laranjeiras = 156 entries (204 territory executions)
+  assert.equal(firstPreview.summary.totalEntries, 156)
+  assert.equal(firstPreview.summary.totalTerritoryItems, 204)
+  assert.ok(firstPreview.summary.partialOrIncompleteCount >= 10)
   assert.equal(firstPreview.summary.duplicateCount, 0)
 
   // Simulate importing the matched items into workSessions, then running a 2nd import with the same file
@@ -552,4 +557,196 @@ test('validates historico_territorios_2026.json, enforces idempotency, and feeds
   // 19C was worked on 2026-11-01 as "19C(parte)" -> completionState = 'partial', so Rule 1 prioritizes 19C even 4 days later!
   assert.equal(suggestion.recommended[0]?.territory.code, '19C')
   assert.equal(suggestion.recommended[0]?.priorityTier, 1)
+})
+
+test('identifies and recommends missing segments (o que está faltando) for unified territories', () => {
+  const territories: TerritoryRecord[] = [
+    mkTerritory('t-26', '26', 'Guaíba'),
+    mkTerritory('t-03', '03', 'Laranjeiras'),
+    mkTerritory('t-27', '27', 'Guaíba'),
+  ]
+
+  // Territory 26 has 3 registered segments: 26A, 26B, 26C
+  const segments = [
+    {
+      id: 'seg-26a',
+      congregationId: 'cong-1',
+      territoryId: 't-26',
+      description: '26A',
+      status: 'completed' as const,
+      lastWorkedIsoDate: '2026-11-10',
+    },
+    {
+      id: 'seg-26b',
+      congregationId: 'cong-1',
+      territoryId: 't-26',
+      description: '26B',
+      status: 'completed' as const,
+      lastWorkedIsoDate: '2026-11-10',
+    },
+    {
+      id: 'seg-26c',
+      congregationId: 'cong-1',
+      territoryId: 't-26',
+      description: '26C',
+      status: 'pending' as const,
+      lastWorkedIsoDate: null,
+    },
+  ]
+
+  // Territory 03 has no pre-registered segments, but had 03B worked on 2026-11-12 via workSession
+  const workSessions: WorkSessionRecord[] = [
+    {
+      id: 'ws-26ab',
+      congregationId: 'cong-1',
+      territoryId: 't-26',
+      conductorUserId: 'u-1',
+      conductorName: 'Julio Cesar',
+      isoDate: '2026-11-10',
+      segmentsWorked: ['seg-26a', 'seg-26b'],
+      notes: 'Segmentos feitos: 26A, 26B',
+      completionState: 'partial',
+      territoryCodeRaw: '26A, 26B',
+    },
+    {
+      id: 'ws-03b',
+      congregationId: 'cong-1',
+      territoryId: 't-03',
+      conductorUserId: 'u-1',
+      conductorName: 'Gusmão',
+      isoDate: '2026-11-12',
+      segmentsWorked: [],
+      notes: '',
+      completionState: 'completed',
+      territoryCodeRaw: '03B',
+    },
+  ]
+
+  const statuses = computeTerritoryStatuses({
+    territories,
+    segments,
+    assignments: [],
+    workSessions,
+    referenceIsoDate: '2026-11-17',
+  })
+
+  const snap26 = statuses.get('t-26')!
+  assert.deepEqual(snap26.missingSegmentCodes, ['26C'])
+  assert.deepEqual(snap26.completedSegmentCodes, ['26A', '26B'])
+  assert.equal(snap26.status, 'partial')
+
+  const snap03 = statuses.get('t-03')!
+  assert.deepEqual(snap03.missingSegmentCodes, ['03A'])
+  assert.deepEqual(snap03.completedSegmentCodes, ['03B'])
+  assert.equal(snap03.status, 'partial')
+
+  const suggestion = suggestTerritories({
+    isoDate: '2026-11-17',
+    periodType: 'morning',
+    meetingLocationId: 'loc-1',
+    allowedTerritoryIds: ['t-26', 't-03', 't-27'],
+    territories,
+    segments,
+    assignments: [],
+    workSessions,
+    requestedVolume: 2,
+  })
+
+  assert.equal(suggestion.recommended.length, 2)
+  const rec03 = suggestion.recommended.find((r) => r.territory.id === 't-03')!
+  const rec26 = suggestion.recommended.find((r) => r.territory.id === 't-26')!
+  assert.deepEqual(rec03.recommendedSegmentCodes, ['03A'])
+  assert.deepEqual(rec26.recommendedSegmentCodes, ['26C'])
+})
+
+test('matches Parque das Laranjeiras to Laranjeiras and assigns targetSegmentCode for segmented tokens', () => {
+  assert.equal(isSameHistoryRegion('Parque das Laranjeiras', 'Laranjeiras'), true)
+  assert.equal(isSameHistoryRegion('Guaíba', 'Parque das Laranjeiras'), false)
+
+  const territories: TerritoryRecord[] = [
+    mkTerritory('t-03', '03', 'Parque das Laranjeiras'),
+    mkTerritory('t-14', '14', 'Guaíba'),
+  ]
+
+  const [tok03b, tok14b] = parseHistoryTerritoryTokens(['03B', '14B (Lambertti)'])
+  const m03b = matchHistoryTerritory({
+    parsedToken: tok03b!,
+    regionNameJson: 'Laranjeiras',
+    territories,
+  })
+  assert.equal(m03b.status, 'matched')
+  assert.equal(m03b.matched?.id, 't-03')
+  assert.equal(m03b.targetSegmentCode, '03B')
+
+  const m14b = matchHistoryTerritory({
+    parsedToken: tok14b!,
+    regionNameJson: 'Guaíba',
+    territories,
+  })
+  assert.equal(m14b.status, 'matched')
+  assert.equal(m14b.matched?.id, 't-14')
+  assert.equal(m14b.targetSegmentCode, '14B')
+})
+
+test('exports territory history timeline entries to valid escaped CSV with segments and notes', () => {
+  const t26 = mkTerritory('t-26', '26', 'Guaíba')
+  const territoriesById = new Map<string, TerritoryRecord>([['t-26', t26]])
+  const segmentsById = new Map<string, TerritorySegmentRecord>([
+    [
+      'seg-26a',
+      {
+        id: 'seg-26a',
+        congregationId: 'cong-1',
+        territoryId: 't-26',
+        description: '26A',
+        status: 'completed',
+        lastWorkedIsoDate: '2026-11-10',
+      },
+    ],
+  ])
+  const workSessionsById = new Map<string, WorkSessionRecord>([
+    [
+      'ws-1',
+      {
+        id: 'ws-1',
+        congregationId: 'cong-1',
+        territoryId: 't-26',
+        conductorUserId: 'u-1',
+        conductorName: 'Julio, Cesar',
+        isoDate: '2026-11-10',
+        segmentsWorked: ['seg-26a'],
+        notes: 'Obs: "teste"',
+        completionState: 'partial',
+        raw: '10.11 - Julio, Cesar - 26A (parte)',
+      },
+    ],
+  ])
+
+  const csv = buildTerritoryHistoryCsv({
+    territoriesById,
+    segmentsById,
+    workSessionsById,
+    entries: [
+      {
+        id: 'ws-1',
+        kind: 'workSession',
+        isoDate: '2026-11-10',
+        locationId: null,
+        locationName: 'Guaíba',
+        regionName: 'Guaíba',
+        periodType: 'morning',
+        conductorNames: ['Julio, Cesar'],
+        territoryIds: ['t-26'],
+        territoryCodes: ['26'],
+        territoryCodeRaw: '26A',
+        executedTerritoryIds: ['t-26'],
+        completionState: 'partial',
+        raw: '10.11 - Julio, Cesar - 26A (parte)',
+        notes: 'Obs: "teste"',
+      },
+    ],
+  })
+
+  assert.ok(csv.startsWith('\uFEFFData,'))
+  assert.ok(csv.includes('2026-11-10,,Execução,morning,Guaíba,Guaíba,"Julio, Cesar",26,26A,partial,"Obs: ""teste""",10.11 - Julio, Cesar - 26A (parte)'.replace('10.11 - Julio, Cesar - 26A (parte)', '"10.11 - Julio, Cesar - 26A (parte)"')))
 })
