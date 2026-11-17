@@ -12,11 +12,27 @@ final publisherGroupsProvider = FutureProvider<List<PublisherGroup>>((ref) async
   if (auth is! AuthAuthenticated) return const [];
   final congregationId = ref.watch(currentCongregationProvider);
   if (congregationId == null || congregationId.isEmpty) return const [];
-  final snapshot = await FirebaseFirestore.instance
+  final user = auth.user;
+  final firestore = FirebaseFirestore.instance;
+
+  if (!user.hasFullPublishersAccess && user.isGroupSuperintendent) {
+    final doc = await firestore
+        .collection('publisherGroups')
+        .doc(user.supervisedGroupId)
+        .get();
+    if (!doc.exists || doc.data() == null) return const [];
+    final data = doc.data()!;
+    if (data['congregationId'] != congregationId) return const [];
+    return [PublisherGroup.fromDoc(doc.id, data)];
+  }
+
+  final snapshot = await firestore
       .collection('publisherGroups')
       .where('congregationId', isEqualTo: congregationId)
       .get();
-  final groups = snapshot.docs.map((doc) => PublisherGroup.fromDoc(doc.id, doc.data())).toList();
+  final groups = snapshot.docs
+      .map((doc) => PublisherGroup.fromDoc(doc.id, doc.data()))
+      .toList();
   groups.sort((a, b) => a.name.compareTo(b.name));
   return groups;
 });

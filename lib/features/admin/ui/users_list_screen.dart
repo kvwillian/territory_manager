@@ -80,9 +80,10 @@ class UsersListScreen extends ConsumerWidget {
     WidgetRef ref,
     UserModel user,
   ) async {
-    final initial = user.accessFlags ??
+    final initialAccess = user.accessFlags ??
         (user.isAdmin ? AccessFlags.all : [AccessFlags.territories]);
-    final selected = {...initial};
+    final selectedAccess = {...initialAccess};
+    final selectedManage = {...user.manageFlags};
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -90,24 +91,52 @@ class UsersListScreen extends ConsumerWidget {
           builder: (context, setState) {
             return AlertDialog(
               title: Text('Acesso de ${user.name}'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final flag in AccessFlags.all)
-                    CheckboxListTile(
-                      value: selected.contains(flag),
-                      title: Text(AccessFlags.labels[flag] ?? flag),
-                      onChanged: (value) {
-                        setState(() {
-                          if (value == true) {
-                            selected.add(flag);
-                          } else {
-                            selected.remove(flag);
-                          }
-                        });
-                      },
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Visualização',
+                      style: Theme.of(context).textTheme.labelLarge,
                     ),
-                ],
+                    for (final flag in AccessFlags.all)
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: selectedAccess.contains(flag),
+                        title: Text(AccessFlags.labels[flag] ?? flag),
+                        onChanged: (value) {
+                          setState(() {
+                            if (value == true) {
+                              selectedAccess.add(flag);
+                            } else {
+                              selectedAccess.remove(flag);
+                            }
+                          });
+                        },
+                      ),
+                    const Divider(),
+                    Text(
+                      'Gestão (Edição)',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    for (final flag in ManageFlags.all)
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: selectedManage.contains(flag),
+                        title: Text(ManageFlags.labels[flag] ?? flag),
+                        onChanged: (value) {
+                          setState(() {
+                            if (value == true) {
+                              selectedManage.add(flag);
+                            } else {
+                              selectedManage.remove(flag);
+                            }
+                          });
+                        },
+                      ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -127,7 +156,8 @@ class UsersListScreen extends ConsumerWidget {
     if (saved != true) return;
     await ref.read(userRepositoryProvider).updateAccessFlags(
           user.id,
-          selected.toList(),
+          selectedAccess.toList(),
+          manageFlags: selectedManage.toList(),
         );
     ref.invalidate(usersProvider);
   }

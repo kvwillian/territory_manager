@@ -5,8 +5,11 @@ import { AudioVideoPage } from './features/audio-video/AudioVideoPage'
 import { CleaningPage } from './features/cleaning/CleaningPage'
 import { ElderlySupportPage } from './features/elderly-support/ElderlySupportPage'
 import { MeetingsPage } from './features/meetings/MeetingsPage'
+import { HomePage } from './features/home/HomePage'
 import { useMeetings } from './store'
 import { PublishersPage } from './features/publishers/PublishersPage'
+import { QualificationsPage } from './features/publishers/QualificationsPage'
+import { TerritoriesPage } from './features/territories/TerritoriesPage'
 
 function SettingsPage() {
   const { congregation } = useMeetings()
@@ -23,16 +26,8 @@ export function App() {
   return (
     <Routes>
       <Route element={<AppShell />}>
-        <Route index element={<Navigate to="/designacoes/reunioes" replace />} />
-        <Route
-          path="inicio"
-          element={
-            <PlaceholderPage
-              title="Início"
-              body="O painel da congregação continua no aplicativo. Aqui o gerenciamento começa pelas designações."
-            />
-          }
-        />
+        <Route index element={<Navigate to="/inicio" replace />} />
+        <Route path="inicio" element={<HomePage />} />
         <Route
           path="agenda"
           element={
@@ -46,18 +41,14 @@ export function App() {
         <Route path="designacoes/audio-video" element={<AudioVideoPage />} />
         <Route path="designacoes/idosos" element={<ElderlySupportPage />} />
         <Route path="designacoes/limpeza" element={<CleaningPage />} />
+        <Route path="designacoes/habilitacoes" element={<QualificationsPage />} />
         <Route path="publicadores" element={<PublishersPage />} />
         <Route path="publicadores/grupos" element={<PublishersPage />} />
         <Route path="publicadores/estatisticas" element={<PublishersPage />} />
-        <Route
-          path="territorios"
-          element={
-            <PlaceholderPage
-              title="Territórios"
-              body="Territórios, trechos e o cache offline permanecem no aplicativo de campo."
-            />
-          }
-        />
+        <Route path="territorios" element={<TerritoriesPage />} />
+        <Route path="territorios/lista" element={<TerritoriesPage />} />
+        <Route path="territorios/locais" element={<TerritoriesPage />} />
+        <Route path="territorios/historico" element={<TerritoriesPage />} />
         <Route
           path="relatorios"
           element={

@@ -1,306 +1,86 @@
-# Territory Manager – Congregation Territory Management App
+# Territory Manager
 
-## Overview
+Aplicativo Flutter e painel web (Unio) para a gestão de uma congregação. A interface é em português (Brasil). O código (nomes, comentários) permanece em inglês.
 
-Territory Manager is a Flutter mobile application designed to help a congregation manage preaching territories more efficiently.
+O produto é um gerenciador congregacional usado por várias congregações, cada uma com os próprios dados e usuários. Territórios continuam no centro do uso em campo e seguem funcionando offline.
 
-Currently, territory assignment and tracking are performed manually. This application digitizes the process and simplifies:
+## Princípios
 
-- territory assignment
-- territory progress tracking
-- weekly planning
-- historical records
+1. Simples de usar no celular, principalmente durante o serviço de campo.
+2. Cada congregação isolada das outras.
+3. Admin vê todos os módulos. Os demais só veem o que a conta libera.
+4. Módulo novo segue o padrão já usado: modelo, repositório, provider Riverpod, telas, rota e regra do Firestore.
+5. Offline fica no que já sincroniza (territórios). Cadastros de secretaria nascem online.
 
-The primary goal is to help conductors quickly understand **which areas of a territory still need to be covered**.
+A pergunta que o condutor ainda precisa responder rápido:
 
-The system is optimized for **simplicity and fast usage during field service**.
+**Quais ruas deste território ainda faltam cobrir?**
 
----
+## Navegação
 
-# Language Rule
+O menu inferior do aplicativo tem quatro abas:
 
-All labels, texts, and user-facing strings in the app must be in **Portuguese (BR)**.  
-Code (identifiers, variables, classes, comments) remains in **English**.
+- **Início** — painel da congregação
+- **Agenda** — programação do dia e próximas reuniões (`meetingPrograms`)
+- **Mapas** — territórios em cartões, com o status de cobertura
+- **Menu** — publicadores, habilitações de designação, grupos, escalas (áudio e vídeo, suporte a idosos, limpeza), avisos, horários, cadastros e sair
 
----
+## Visual
 
-# Core Concept
+O sistema visual segue a referência Unio:
 
-A **territory** represents a small geographic area assigned for preaching work.
+- Azul-marinho, índigo, violeta, ciano e verde
+- Fundo claro
+- Cartões brancos com cantos de 16 px
+- Botão principal índigo; secundário só com borda
+- Selos de status: Disponível, Em progresso, Pendente, Concluído
 
-Territories are not always completed in a single session. Therefore, the system must support **partial completion tracking**.
+## Congregações e acesso
 
-Instead of tracking precise geographic polygons, the app tracks **street-level segments inside a territory**.
+Cada usuário pertence a uma congregação. O app não troca de congregação. Todo documento de negócio leva `congregationId`. As regras do Firestore exigem esse campo e separam admin de condutor.
 
-Each territory contains a list of segments that represent:
+Papel no app:
 
-- a street
-- a side of a street
-- a small section of the territory
+- **Admin** configura e vê todos os módulos.
+- **Condutor** trabalha o que a conta libera.
 
-Segments can be marked as completed by conductors.
+Flags de acesso (`users.accessFlags`):
 
----
+- `territories`
+- `publishers`
+- `meetings`
+- `reports`
 
-# Territory Representation
+Flags de gestão (`users.manageFlags`):
 
-Each territory contains:
+- `meetings`
+- `publishers`
+- `elderlySupport`
 
-- territory name
-- neighborhood name
-- territory image (visual reference)
-- Google Maps link for navigation
-- list of segments
+Conta antiga sem `accessFlags`: o condutor continua vendo territórios. O admin ignora a lista. Superintendentes de grupo (`supervisedGroupId`) podem consultar os publicadores do próprio grupo.
 
-The territory image serves as a **visual reference of the area**.
+## O que o app já cobre
 
-When users need navigation, they can open the territory location directly in Google Maps.
+**Territórios.** Nome, número, bairro, imagem, link do mapa e trechos de rua. Trecho é pendente ou concluído. O condutor marca o progresso. O cache local é Drift. Mapas lista os territórios.
 
----
+**Campo.** Bairros, locais de saída, grupos de domingo e designações semanais. A sessão de trabalho registra território, data, condutor e trechos concluídos.
 
-# Segment Tracking
+**Congregação.** Nome, cidade, estado (`state`/`estado`/`uf`), país, e dia/hora da reunião do meio de semana e do fim de semana.
 
-Segments represent the smallest unit of work inside a territory.
+**Avisos.** Anúncio ou evento. Admin publica. Quem está na congregação lê.
 
-Examples:
+**Publicadores e Grupos.** Cadastro separado do login com informações pessoais (nome, idade, gênero, telefone, grupo, status) e privilégio congregacional/pioneiro. As funções de designação (`estudante`, `indicador`, `volante`, `microfone`, `som`) e marcas de cuidado (`needsElderlySupport`, `driver`) são configuradas na área de **Designações → Habilitações** (`/designacoes/habilitacoes` no Web e `/qualifications` no Flutter).
 
-- Rua A – left side
-- Rua A – right side
-- Rua B – block 1
+**Escalas e Reuniões.**
+- **Agenda (`/agenda`):** Lê `meetingPrograms` do Firestore (mostrando `published` para membros e incluindo `draft` para quem gerencia reuniões).
+- **Áudio e Vídeo (`/audio-video`):** Escala mensal (`audioVideoRosters`).
+- **Suporte a Idosos (`/elderly-support`):** Escalas de caronas (`elderlySupportSchedules`).
+- **Limpeza (`/cleaning`):** Designações de limpeza (`cleaningAssignments`).
 
-Each segment has a status.
+**Conta.** Login, criação de usuário pela Cloud Function `createUser`, e senha temporária por e-mail. Quem entra com essa senha precisa escolher outra no app antes de continuar.
 
-Segment status:
+## O que ainda não entra
 
-PENDING  
-COMPLETED
-
-Segments are displayed as a **checklist** in the territory screen.
-
-Conductors mark segments as completed during field service.
-
----
-
-# Preaching Sessions
-
-The congregation has organized preaching sessions during the week.
-
-Typical schedule:
-
-Tuesday – fixed meeting location  
-Wednesday – fixed meeting location  
-Thursday – fixed meeting location  
-Friday – fixed meeting location  
-Saturday – fixed meeting location  
-Sunday – multiple groups (example: 6 groups)
-
-Each session starts at a **meeting location** (Casa de Saída).
-
----
-
-# Meeting Locations
-
-A meeting location represents where a group starts field service.
-
-Each meeting location includes:
-
-- name
-- coordinates
-- maximum territory radius
-- optional list of allowed territories
-
-Territory suggestions must prioritize areas close to the meeting location.
-
----
-
-# Territory Suggestion System
-
-The system can automatically suggest territories for a session.
-
-Suggestions consider:
-
-- distance from meeting location
-- unfinished segments
-- time since last worked
-- avoiding repeated territories for the same group
-
-Admins can accept or manually change suggestions.
-
----
-
-# Rotation Rule
-
-The system should avoid assigning the **same territory to the same group in consecutive weeks**.
-
-Example:
-
-Week 1  
-Group A → Territory 12
-
-Week 2  
-Group A → Territory 12 (avoid)
-
----
-
-# Work Sessions
-
-Every preaching session may generate a **work session record**.
-
-A work session includes:
-
-- territory
-- date
-- conductor
-- segments completed
-- optional notes
-
-This provides historical traceability.
-
----
-
-# Roles
-
-Two roles exist in the system.
-
-Admin
-
-Responsible for:
-
-- managing territories
-- managing segments
-- configuring meeting locations
-- generating weekly assignments
-
-Conductor
-
-Responsible for:
-
-- viewing assigned territory
-- marking segments as completed
-- recording work sessions
-
-Conductors cannot modify system configuration.
-
----
-
-# Data Model (Conceptual)
-
-User
-
-- id
-- name
-- role
-
-Territory
-
-- id
-- name
-- neighborhood
-- imageUrl
-- mapsUrl
-- latitude
-- longitude
-
-Segment
-
-- id
-- territoryId
-- description
-- status
-- lastWorkedDate
-
-MeetingLocation
-
-- id
-- name
-- latitude
-- longitude
-- radiusMeters
-- allowedTerritories
-
-Assignment
-
-- id
-- date
-- conductorId
-- meetingLocationId
-- territoryIds[]
-- preachingSessionId (optional)
-
-WorkSession
-
-- id
-- date
-- conductorId
-- territoryId
-- segmentsWorked
-- notes
-
----
-
-# Technology Stack
-
-Frontend
-
-Flutter
-
-State management
-
-Riverpod
-
-Backend
-
-Firebase
-
-Services:
-
-Firestore  
-Firebase Auth  
-Firebase Storage  
-
-Cloud Functions may be used for automation tasks.
-
----
-
-# Project Structure
-
-lib/
-
-core/
-utils
-
-features/
-
-auth/
-
-territories/
-models
-repository
-services
-ui
-
-assignments/
-
-admin/
-
-conductor/
-
-shared/
-
-widgets
-theme
-
----
-
-# Key Design Principle
-
-The system must always prioritize:
-
-1. Simplicity
-2. Fast interaction
-3. Clear progress visibility
-4. Minimal configuration effort
-
-The most important user experience is allowing conductors to quickly answer:
-
-**"Which streets in this territory still need to be covered?"**
+- Relatório mensal de serviço de campo (`/module/relatorios`). Não reutilizar `workSessions`.
+- Troca ou criação de uma segunda congregação na interface.
+- Mapa geográfico com polígonos e sugestão automática de território.

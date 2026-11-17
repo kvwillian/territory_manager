@@ -60,3 +60,5 @@ apps/unio/dist/
 
 # Local secrets (Resend, etc.)
 .env
+
+.firebase/

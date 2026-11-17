@@ -9,10 +9,14 @@ import {
   type PublisherGroupRecord,
   type PublisherRecord,
   type PublisherStore,
+  bulkDeletePublishers,
+  bulkMovePublishers,
+  bulkUpdatePublishers,
   createPublisher,
   createPublisherGroup,
   deletePublisherGroup,
   deletePublisherRecord,
+  importPublisherGroups,
   listGroupMembers,
   listPublisherGroups,
   listPublishers,
@@ -129,6 +133,55 @@ function firestoreStore(): PublisherStore {
       else payload.supervisedGroupId = admin.firestore.FieldValue.delete()
       await db.collection("users").doc(uid).set(payload, { merge: true })
     },
+    async saveBatch({ publishers, groups }) {
+      const ops: Array<{ ref: FirebaseFirestore.DocumentReference; data: Record<string, unknown> }> = [
+        ...groups.map((group) => ({
+          ref: db.collection(PUBLISHER_GROUPS).doc(group.id),
+          data: withoutEmpty(group),
+        })),
+        ...publishers.map((publisher) => ({
+          ref: db.collection(PUBLISHERS).doc(publisher.id),
+          data: withoutEmpty(publisher),
+        })),
+      ]
+      const chunkSize = 450
+      for (let i = 0; i < ops.length; i += chunkSize) {
+        const batch = db.batch()
+        for (const op of ops.slice(i, i + chunkSize)) {
+          batch.set(op.ref, op.data)
+        }
+        await batch.commit()
+      }
+    },
+    async deleteBatch({ publisherIds, groupIds, updatedGroups }) {
+      type BatchOp =
+        | { kind: "set"; ref: FirebaseFirestore.DocumentReference; data: Record<string, unknown> }
+        | { kind: "delete"; ref: FirebaseFirestore.DocumentReference }
+      const ops: BatchOp[] = [
+        ...updatedGroups.map((group) => ({
+          kind: "set" as const,
+          ref: db.collection(PUBLISHER_GROUPS).doc(group.id),
+          data: withoutEmpty(group),
+        })),
+        ...groupIds.map((id) => ({
+          kind: "delete" as const,
+          ref: db.collection(PUBLISHER_GROUPS).doc(id),
+        })),
+        ...publisherIds.map((id) => ({
+          kind: "delete" as const,
+          ref: db.collection(PUBLISHERS).doc(id),
+        })),
+      ]
+      const chunkSize = 450
+      for (let i = 0; i < ops.length; i += chunkSize) {
+        const batch = db.batch()
+        for (const op of ops.slice(i, i + chunkSize)) {
+          if (op.kind === "set") batch.set(op.ref, op.data)
+          else batch.delete(op.ref)
+        }
+        await batch.commit()
+      }
+    },
   }
 }
 
@@ -214,4 +267,20 @@ export const deletePublisherAccount = functions.https.onCall(async (data: Record
 
 export const deleteCongregationGroup = functions.https.onCall(async (data: Record<string, unknown> | null, context) => {
   return run(context, (caller, dependencies) => deletePublisherGroup(dependencies, caller, data ?? {}))
+})
+
+export const importCongregationGroups = functions.https.onCall(async (data: Record<string, unknown> | null, context) => {
+  return run(context, (caller, dependencies) => importPublisherGroups(dependencies, caller, data ?? {}))
+})
+
+export const bulkDeletePublisherAccounts = functions.https.onCall(async (data: Record<string, unknown> | null, context) => {
+  return run(context, (caller, dependencies) => bulkDeletePublishers(dependencies, caller, data ?? {}))
+})
+
+export const bulkMovePublisherAccounts = functions.https.onCall(async (data: Record<string, unknown> | null, context) => {
+  return run(context, (caller, dependencies) => bulkMovePublishers(dependencies, caller, data ?? {}))
+})
+
+export const bulkUpdatePublisherAccounts = functions.https.onCall(async (data: Record<string, unknown> | null, context) => {
+  return run(context, (caller, dependencies) => bulkUpdatePublishers(dependencies, caller, data ?? {}))
 })

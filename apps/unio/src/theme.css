@@ -47,6 +47,18 @@ html.dark .bg-\[\#ECFDF5\] {
   background-color: #12352c;
 }
 
+html.dark .bg-\[\#EFF6FF\] {
+  background-color: #172554;
+}
+
+html.dark .bg-\[\#ECFEFF\] {
+  background-color: #164e63;
+}
+
+html.dark .bg-\[\#F5F3FF\] {
+  background-color: #281b4d;
+}
+
 html.dark .bg-\[\#FEF3C7\] {
   background-color: #3a3214;
 }
@@ -57,6 +69,31 @@ html.dark .bg-\[\#F1F5F9\] {
 
 html.dark .bg-\[\#D5DDE8\] {
   background-color: #3a4458;
+}
+
+html.dark .bg-\[\#DCFCE7\] {
+  background-color: #143829;
+}
+
+html.dark .bg-\[\#DBEAFE\] {
+  background-color: #1c315e;
+}
+
+html.dark .bg-\[\#E2E8F0\] {
+  background-color: #293244;
+}
+
+html.dark .bg-\[\#EEF2FF\] {
+  background-color: #232752;
+}
+
+html.dark .text-\[\#166534\],
+html.dark .text-\[\#14532D\] {
+  color: #86efac;
+}
+
+html.dark .text-\[\#1E40AF\] {
+  color: #93c5fd;
 }
 
 html.dark .text-\[\#334155\] {
@@ -74,6 +111,18 @@ html.dark .text-\[\#0B0E14\] {
 
 html.dark .text-\[\#4338CA\] {
   color: #a5b4fc;
+}
+
+html.dark .text-\[\#1D4ED8\] {
+  color: #93c5fd;
+}
+
+html.dark .text-\[\#0E7490\] {
+  color: #67e8f9;
+}
+
+html.dark .text-\[\#6D28D9\] {
+  color: #c4b5fd;
 }
 
 html.dark .text-\[\#047857\] {

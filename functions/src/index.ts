@@ -468,4 +468,10 @@ export {
   setCongregationPublisherGroup,
   deleteCongregationGroup,
   deletePublisherAccount,
+  importCongregationGroups,
+  bulkDeletePublisherAccounts,
+  bulkMovePublisherAccounts,
+  bulkUpdatePublisherAccounts,
 } from "./publishers";
+
+export { importTerritoryHistory } from "./territories";

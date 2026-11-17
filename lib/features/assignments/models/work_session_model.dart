@@ -8,6 +8,10 @@ class WorkSessionModel {
     required this.segmentsWorked,
     this.notes,
     this.congregationId,
+    this.conductorName,
+    this.completionState = 'completed',
+    this.raw,
+    this.importSourceKey,
   });
 
   final String id;
@@ -17,6 +21,10 @@ class WorkSessionModel {
   final List<String> segmentsWorked;
   final String? notes;
   final String? congregationId;
+  final String? conductorName;
+  final String completionState;
+  final String? raw;
+  final String? importSourceKey;
 
   WorkSessionModel copyWith({
     String? id,
@@ -26,6 +34,10 @@ class WorkSessionModel {
     List<String>? segmentsWorked,
     String? notes,
     String? congregationId,
+    String? conductorName,
+    String? completionState,
+    String? raw,
+    String? importSourceKey,
   }) {
     return WorkSessionModel(
       id: id ?? this.id,
@@ -35,6 +47,10 @@ class WorkSessionModel {
       segmentsWorked: segmentsWorked ?? this.segmentsWorked,
       notes: notes ?? this.notes,
       congregationId: congregationId ?? this.congregationId,
+      conductorName: conductorName ?? this.conductorName,
+      completionState: completionState ?? this.completionState,
+      raw: raw ?? this.raw,
+      importSourceKey: importSourceKey ?? this.importSourceKey,
     );
   }
 
@@ -47,6 +63,10 @@ class WorkSessionModel {
       'segmentsWorked': segmentsWorked,
       'notes': notes,
       'congregationId': congregationId,
+      if (conductorName != null) 'conductorName': conductorName,
+      'completionState': completionState,
+      if (raw != null) 'raw': raw,
+      if (importSourceKey != null) 'importSourceKey': importSourceKey,
     };
   }
 
@@ -60,6 +80,10 @@ class WorkSessionModel {
           (map['segmentsWorked'] as List<dynamic>?)?.map((e) => e as String).toList() ?? [],
       notes: map['notes'] as String?,
       congregationId: map['congregationId'] as String?,
+      conductorName: map['conductorName'] as String?,
+      completionState: (map['completionState'] as String?) ?? 'completed',
+      raw: map['raw'] as String?,
+      importSourceKey: map['importSourceKey'] as String?,
     );
   }
 }

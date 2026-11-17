@@ -90,6 +90,7 @@ class _CongregationCard extends StatelessWidget {
         : 'Congregação';
     final place = [
       congregation?.city,
+      congregation?.state,
       congregation?.country,
     ].whereType<String>().where((part) => part.isNotEmpty).join(', ');
     return AppCard(

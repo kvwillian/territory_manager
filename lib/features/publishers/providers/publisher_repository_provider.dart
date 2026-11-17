@@ -14,7 +14,15 @@ final publisherRepositoryProvider = Provider<PublisherRepository>((ref) {
       authState.user.id != 'demo-user' &&
       authState.user.id != 'demo-admin';
   if (useFirestore) {
-    return FirestorePublisherRepository(ref.watch(currentCongregationProvider));
+    final user = authState.user;
+    final restrictedGroupId =
+        !user.hasFullPublishersAccess && user.isGroupSuperintendent
+            ? user.supervisedGroupId
+            : null;
+    return FirestorePublisherRepository(
+      ref.watch(currentCongregationProvider),
+      restrictedGroupId: restrictedGroupId,
+    );
   }
   return MockPublisherRepository();
 });

@@ -72,36 +72,18 @@ class AuthNotifier extends Notifier<AuthState> {
           debugPrint(
             'AuthProvider: user doc found congregationId=$cid, full data=$data',
           );
-          if (cid != null && cid.isNotEmpty) {
-            await user.getIdToken(true);
-            debugPrint('AuthProvider: token refreshed after user doc confirmed');
-            return UserModel(
-              id: user.uid,
-              name: data['name'] as String? ?? user.displayName ?? user.email ?? 'Usuário',
-              email: data['email'] as String? ?? user.email,
-              role: UserRole.values.firstWhere(
-                (e) => e.name == data['role'],
-                orElse: () => UserRole.conductor,
-              ),
-              congregationId: cid,
-              mustChangePassword: data['mustChangePassword'] == true,
-              accessFlags: accessFlagsFromMap(data),
-            );
-          }
           await user.getIdToken(true);
-          debugPrint('AuthProvider: token refreshed (user doc has no congregationId)');
-          return UserModel(
-            id: user.uid,
-            name: data['name'] as String? ?? user.displayName ?? user.email ?? 'Usuário',
-            email: data['email'] as String? ?? user.email,
-            role: UserRole.values.firstWhere(
-              (e) => e.name == data['role'],
-              orElse: () => UserRole.conductor,
-            ),
-            congregationId: defaultCongregationId,
-            mustChangePassword: data['mustChangePassword'] == true,
-            accessFlags: accessFlagsFromMap(data),
-          );
+          return UserModel.fromMap({
+            ...data,
+            'id': user.uid,
+            'name': data['name'] as String? ??
+                user.displayName ??
+                user.email ??
+                'Usuário',
+            'email': data['email'] as String? ?? user.email,
+            'congregationId':
+                (cid != null && cid.isNotEmpty) ? cid : defaultCongregationId,
+          });
         }
       } catch (e, st) {
         debugPrint('AuthProvider._userFromFirebaseUser attempt ${attempt + 1} error: $e\n$st');

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_spacing.dart';
 import '../../../shared/widgets/app_card.dart';
+import '../../publisher_groups/providers/publisher_groups_provider.dart';
 import '../models/publisher_model.dart';
 import '../providers/publisher_repository_provider.dart';
 
@@ -20,17 +21,14 @@ class PublisherFormScreen extends ConsumerStatefulWidget {
 class _PublisherFormScreenState extends ConsumerState<PublisherFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _ageController = TextEditingController();
   CongregationPrivilege _privilege = CongregationPrivilege.publisher;
   PioneerService _pioneer = PioneerService.none;
-  bool _indicador = false;
-  bool _microfone = false;
-  bool _som = false;
-  bool _estudante = false;
-  bool _volante = false;
-  bool _needsElderlySupport = false;
-  bool _driver = false;
-  String? _gender;
-  int? _age;
+  String _gender = 'masculino';
+  String _status = 'active';
+  String? _groupId;
+  PublisherModel? _existing;
   bool _loading = false;
   bool _ready = false;
 
@@ -39,23 +37,24 @@ class _PublisherFormScreenState extends ConsumerState<PublisherFormScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _phoneController.dispose();
+    _ageController.dispose();
     super.dispose();
   }
 
   void _load(PublisherModel publisher) {
     if (_ready) return;
+    _existing = publisher;
     _nameController.text = publisher.name;
+    _phoneController.text = publisher.phone ?? '';
+    _ageController.text = publisher.age != null && publisher.age! > 0
+        ? '${publisher.age}'
+        : '';
     _privilege = publisher.privilege;
     _pioneer = publisher.pioneer;
-    _indicador = publisher.indicador;
-    _microfone = publisher.microfone;
-    _som = publisher.som;
-    _estudante = publisher.estudante;
-    _volante = publisher.volante;
-    _needsElderlySupport = publisher.needsElderlySupport;
-    _driver = publisher.driver;
-    _gender = publisher.gender;
-    _age = publisher.age;
+    _gender = publisher.gender == 'feminino' ? 'feminino' : 'masculino';
+    _status = publisher.status == 'inactive' ? 'inactive' : 'active';
+    _groupId = publisher.groupId;
     _ready = true;
   }
 
@@ -63,20 +62,30 @@ class _PublisherFormScreenState extends ConsumerState<PublisherFormScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     final repo = ref.read(publisherRepositoryProvider);
+    final parsedAge = int.tryParse(_ageController.text.trim());
+    final age = parsedAge != null && parsedAge > 0 ? parsedAge : null;
+    final phone = _phoneController.text.trim();
+    final base = _existing;
     final publisher = PublisherModel(
       id: widget.publisherId ?? '',
       name: _nameController.text.trim(),
       privilege: _privilege,
       pioneer: _pioneer,
-      indicador: _indicador,
-      microfone: _microfone,
-      som: _som,
-      estudante: _estudante,
-      volante: _volante,
-      needsElderlySupport: _needsElderlySupport,
-      driver: _driver,
+      indicador: base?.indicador ?? false,
+      microfone: base?.microfone ?? false,
+      som: base?.som ?? false,
+      estudante: base?.estudante ?? false,
+      volante: base?.volante ?? false,
+      needsElderlySupport: base?.needsElderlySupport ?? false,
+      driver: base?.driver ?? false,
+      congregationId: base?.congregationId,
+      phone: phone.isEmpty ? null : phone,
+      email: base?.email,
+      groupId: _groupId,
+      userId: base?.userId,
       gender: _gender,
-      age: _age,
+      age: age,
+      status: _status,
     );
     try {
       if (_isEdit) {
@@ -113,6 +122,11 @@ class _PublisherFormScreenState extends ConsumerState<PublisherFormScreen> {
       _load(match);
     }
 
+    final groups = ref.watch(publisherGroupsProvider).maybeWhen(
+          data: (items) => items,
+          orElse: () => const [],
+        );
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.screenPadding),
       child: Form(
@@ -132,9 +146,78 @@ class _PublisherFormScreenState extends ConsumerState<PublisherFormScreen> {
                         : null,
                   ),
                   const SizedBox(height: AppSpacing.md),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _ageController,
+                          decoration: const InputDecoration(labelText: 'Idade'),
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _gender,
+                          decoration: const InputDecoration(labelText: 'Gênero'),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'masculino',
+                              child: Text('Masculino'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'feminino',
+                              child: Text('Feminino'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) setState(() => _gender = value);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  TextFormField(
+                    controller: _phoneController,
+                    decoration: const InputDecoration(labelText: 'Telefone'),
+                    keyboardType: TextInputType.phone,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  DropdownButtonFormField<String?>(
+                    initialValue: groups.any((g) => g.id == _groupId) ? _groupId : null,
+                    decoration: const InputDecoration(labelText: 'Grupo'),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Sem grupo'),
+                      ),
+                      for (final group in groups)
+                        DropdownMenuItem<String?>(
+                          value: group.id,
+                          child: Text(group.name),
+                        ),
+                    ],
+                    onChanged: (value) => setState(() => _groupId = value),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  DropdownButtonFormField<String>(
+                    initialValue: _status,
+                    decoration: const InputDecoration(labelText: 'Status'),
+                    items: const [
+                      DropdownMenuItem(value: 'active', child: Text('Ativo')),
+                      DropdownMenuItem(value: 'inactive', child: Text('Inativo')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setState(() => _status = value);
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.md),
                   DropdownButtonFormField<CongregationPrivilege>(
                     initialValue: _privilege,
-                    decoration: const InputDecoration(labelText: 'Privilégio'),
+                    decoration: const InputDecoration(
+                      labelText: 'Privilégio congregacional',
+                    ),
                     items: [
                       for (final privilege in CongregationPrivilege.values)
                         DropdownMenuItem(
@@ -162,51 +245,6 @@ class _PublisherFormScreenState extends ConsumerState<PublisherFormScreen> {
                     onChanged: (value) {
                       if (value != null) setState(() => _pioneer = value);
                     },
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Indicador'),
-                    value: _indicador,
-                    onChanged: (value) => setState(() => _indicador = value ?? false),
-                  ),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Microfone'),
-                    subtitle: const Text('Pode ser designado no volante'),
-                    value: _microfone,
-                    onChanged: (value) => setState(() => _microfone = value ?? false),
-                  ),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Som'),
-                    subtitle: const Text('Pode ser designado no volante e na mesa de som'),
-                    value: _som,
-                    onChanged: (value) => setState(() => _som = value ?? false),
-                  ),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Estudante'),
-                    value: _estudante,
-                    onChanged: (value) => setState(() => _estudante = value ?? false),
-                  ),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Volante'),
-                    value: _volante,
-                    onChanged: (value) => setState(() => _volante = value ?? false),
-                  ),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Precisa de apoio'),
-                    value: _needsElderlySupport,
-                    onChanged: (value) => setState(() => _needsElderlySupport = value ?? false),
-                  ),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Motorista'),
-                    value: _driver,
-                    onChanged: (value) => setState(() => _driver = value ?? false),
                   ),
                 ],
               ),

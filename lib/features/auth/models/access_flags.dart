@@ -19,3 +19,22 @@ class AccessFlags {
     reports: 'Relatórios',
   };
 }
+
+/// Modules a non-admin user may manage (create/edit/publish).
+class ManageFlags {
+  static const meetings = 'meetings';
+  static const publishers = 'publishers';
+  static const elderlySupport = 'elderlySupport';
+
+  static const all = [
+    meetings,
+    publishers,
+    elderlySupport,
+  ];
+
+  static const labels = {
+    meetings: 'Gerenciar reuniões e escalas',
+    publishers: 'Gerenciar publicadores e grupos',
+    elderlySupport: 'Gerenciar suporte a idosos',
+  };
+}

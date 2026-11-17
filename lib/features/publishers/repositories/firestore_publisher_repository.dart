@@ -8,19 +8,26 @@ import 'publisher_repository.dart';
 const _collection = 'publishers';
 
 class FirestorePublisherRepository implements PublisherRepository {
-  FirestorePublisherRepository(this.congregationId);
+  FirestorePublisherRepository(
+    this.congregationId, {
+    this.restrictedGroupId,
+  });
 
   final String? congregationId;
+  final String? restrictedGroupId;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   String get _cid => congregationId ?? defaultCongregationId;
 
   @override
   Future<List<PublisherModel>> getPublishers() async {
-    final snapshot = await _firestore
+    var query = _firestore
         .collection(_collection)
-        .where('congregationId', isEqualTo: _cid)
-        .get();
+        .where('congregationId', isEqualTo: _cid);
+    if (restrictedGroupId != null && restrictedGroupId!.isNotEmpty) {
+      query = query.where('groupId', isEqualTo: restrictedGroupId);
+    }
+    final snapshot = await query.get();
     final items = snapshot.docs.map(_fromDoc).toList();
     items.sort(
       (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
@@ -64,6 +71,13 @@ class FirestorePublisherRepository implements PublisherRepository {
 
   @override
   Future<PublisherModel> updatePublisher(PublisherModel publisher) async {
+    final previous = await getPublisherById(publisher.id);
+    if (previous != null && (previous.groupId ?? '') != (publisher.groupId ?? '')) {
+      await FirebaseFunctions.instance.httpsCallable('setCongregationPublisherGroup').call({
+        'publisherId': publisher.id,
+        'groupId': publisher.groupId ?? '',
+      });
+    }
     final result = await FirebaseFunctions.instance.httpsCallable('updatePublisherAccount').call({
       'publisherId': publisher.id,
       'name': publisher.name,
@@ -77,7 +91,7 @@ class FirestorePublisherRepository implements PublisherRepository {
       'needsElderlySupport': publisher.needsElderlySupport,
       'driver': publisher.driver,
       if (publisher.gender != null) 'gender': publisher.gender,
-      if (publisher.age != null) 'age': publisher.age,
+      'age': publisher.age,
       'phone': publisher.phone,
       'email': publisher.email,
       'status': publisher.status,

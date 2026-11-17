@@ -1,16 +1,27 @@
 import type { MockPublisher } from './mock'
 
 export function privilegeLabel(publisher: Pick<MockPublisher, 'privilege' | 'pioneer' | 'gender'>) {
-  const role = publisher.privilege === 'elder'
-    ? publisher.gender === 'feminino' ? 'Anciã' : 'Ancião'
-    : publisher.privilege === 'ministerialServant'
-      ? publisher.gender === 'feminino' ? 'Serva ministerial' : 'Servo ministerial'
-      : publisher.gender === 'feminino' ? 'Publicadora' : 'Publicador'
-  const pioneer = publisher.pioneer === 'auxiliary'
-    ? publisher.gender === 'feminino' ? 'pioneira auxiliar' : 'pioneiro auxiliar'
-    : publisher.pioneer === 'regular'
-      ? publisher.gender === 'feminino' ? 'pioneira regular' : 'pioneiro regular'
-      : ''
+  const effectivePrivilege = publisher.gender === 'feminino' ? 'publisher' : publisher.privilege
+  const role =
+    effectivePrivilege === 'elder'
+      ? 'Ancião'
+      : effectivePrivilege === 'ministerialServant'
+        ? 'Servo ministerial'
+        : publisher.gender === 'feminino'
+          ? 'Publicadora'
+          : 'Publicador'
+
+  const pioneer =
+    publisher.pioneer === 'auxiliary'
+      ? publisher.gender === 'feminino'
+        ? 'pioneira auxiliar'
+        : 'pioneiro auxiliar'
+      : publisher.pioneer === 'regular'
+        ? publisher.gender === 'feminino'
+          ? 'pioneira regular'
+          : 'pioneiro regular'
+        : ''
+
   return pioneer ? `${role} · ${pioneer}` : role
 }
 
@@ -22,9 +33,9 @@ export const privilegeSections = [
   { id: 'publisher', title: 'Publicadores' },
 ] as const
 
-export function privilegeSectionId(publisher: Pick<MockPublisher, 'privilege' | 'pioneer'>) {
-  if (publisher.privilege === 'elder') return 'elder'
-  if (publisher.privilege === 'ministerialServant') return 'ministerialServant'
+export function privilegeSectionId(publisher: Pick<MockPublisher, 'privilege' | 'pioneer'> & { gender?: string }) {
+  if (publisher.gender !== 'feminino' && publisher.privilege === 'elder') return 'elder'
+  if (publisher.gender !== 'feminino' && publisher.privilege === 'ministerialServant') return 'ministerialServant'
   if (publisher.pioneer === 'regular') return 'regular'
   if (publisher.pioneer === 'auxiliary') return 'auxiliary'
   return 'publisher'

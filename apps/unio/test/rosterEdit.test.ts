@@ -84,3 +84,36 @@ test('ignores a day outside the month', () => {
   assert.equal(addRosterDay(roster, 0), roster)
   assert.equal(addRosterDay(roster, 32), roster)
 })
+
+import { privilegeLabel, privilegeSectionId } from '../src/features/publishers/privileges.ts'
+
+test('restricts women to pioneer and student roles only', () => {
+  assert.equal(
+    privilegeLabel({ gender: 'feminino', privilege: 'elder', pioneer: 'regular' }),
+    'Publicadora · pioneira regular',
+  )
+  assert.equal(
+    privilegeLabel({ gender: 'feminino', privilege: 'ministerialServant', pioneer: 'auxiliary' }),
+    'Publicadora · pioneira auxiliar',
+  )
+  assert.equal(
+    privilegeSectionId({ gender: 'feminino', privilege: 'elder', pioneer: 'none' }),
+    'publisher',
+  )
+  assert.equal(
+    qualifiesFor({ gender: 'feminino', indicador: true, microfone: true, som: true }, 'attendants'),
+    false,
+  )
+  assert.ok(
+    candidatesForMeetingLabel(mockPublishers, 'Indicadores').every((p) => p.gender === 'masculino'),
+  )
+  assert.ok(
+    candidatesForMeetingLabel(mockPublishers, 'Volantes').every((p) => p.gender === 'masculino'),
+  )
+  assert.ok(
+    candidatesForMeetingLabel(mockPublishers, 'Áudio e Vídeo').every((p) => p.gender === 'masculino'),
+  )
+  assert.ok(
+    candidatesForMeetingLabel(mockPublishers, 'Presidente').every((p) => p.gender === 'masculino'),
+  )
+})

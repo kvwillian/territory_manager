@@ -58,8 +58,12 @@ class FirestoreWorkSessionRepository implements WorkSessionRepository {
     await docRef.set({
       'territoryId': session.territoryId,
       'conductorId': session.conductorId,
+      if (session.conductorName != null) 'conductorName': session.conductorName,
       'date': Timestamp.fromDate(session.date),
       'segmentsWorked': session.segmentsWorked,
+      'completionState': session.completionState,
+      if (session.raw != null) 'raw': session.raw,
+      if (session.importSourceKey != null) 'importSourceKey': session.importSourceKey,
       'notes': session.notes,
       'congregationId':
           session.congregationId ?? _effectiveCongregationId,
@@ -82,6 +86,10 @@ class FirestoreWorkSessionRepository implements WorkSessionRepository {
       notes: data['notes'] as String?,
       congregationId:
           data['congregationId'] as String? ?? defaultCongregationId,
+      conductorName: data['conductorName'] as String?,
+      completionState: (data['completionState'] as String?) ?? 'completed',
+      raw: data['raw'] as String?,
+      importSourceKey: data['importSourceKey'] as String?,
     );
   }
 }

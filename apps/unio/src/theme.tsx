@@ -5,14 +5,8 @@ const storageKey = 'unio-theme'
 
 export function ThemeSync() {
   useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    function apply() {
-      const stored = localStorage.getItem(storageKey)
-      if (stored === 'light' || stored === 'dark') return
-      document.documentElement.classList.toggle('dark', media.matches)
-    }
-    media.addEventListener('change', apply)
-    return () => media.removeEventListener('change', apply)
+    const stored = localStorage.getItem(storageKey)
+    document.documentElement.classList.toggle('dark', stored === 'dark')
   }, [])
   return null
 }

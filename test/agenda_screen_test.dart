@@ -43,10 +43,10 @@ void main() {
     await tester.tap(find.text('SEG').first);
     await tester.pumpAndSettle();
 
-    expect(find.text('Reunião de meio de semana'), findsNothing);
     expect(find.text('Nenhum compromisso neste dia.'), findsOneWidget);
-    expect(find.text('Saída de campo'), findsOneWidget);
-    expect(find.text('Assembleia de Circuito'), findsOneWidget);
+    expect(find.text('Saída de campo'), findsNothing);
+    expect(find.text('Assembleia de Circuito'), findsNothing);
+    expect(find.text('Reunião de meio de semana'), findsOneWidget);
   });
 }
 

@@ -9,19 +9,21 @@ type QualifiedPublisher = {
   duties?: readonly string[]
   status?: string
   privilege?: string
+  gender?: string
 }
 
 export function candidatesForMeetingLabel(publishers: MockPublisher[], label: string) {
   const active = publishers.filter((publisher) => publisher.status === 'active')
+  const brothers = active.filter((publisher) => publisher.gender !== 'feminino')
   const key = label.trim().toLocaleLowerCase('pt-BR')
   if (key === 'estudante') return withDuty(active, 'estudante')
-  if (key === 'indicador' || key === 'indicadores') return withDuty(active, 'indicador')
+  if (key === 'indicador' || key === 'indicadores') return withDuty(brothers, 'indicador')
   if (key === 'volante' || key === 'volantes') {
-    return active.filter((publisher) => publisher.duties.includes('volante') || publisher.duties.includes('microfone'))
+    return brothers.filter((publisher) => publisher.duties.includes('volante') || publisher.duties.includes('microfone'))
   }
-  if (key === 'áudio e vídeo' || key === 'audio e video') return withDuty(active, 'audio')
+  if (key === 'áudio e vídeo' || key === 'audio e video') return withDuty(brothers, 'audio')
   if (key === 'presidente') {
-    return active.filter((publisher) => publisher.privilege === 'elder' || publisher.privilege === 'ministerialServant')
+    return brothers.filter((publisher) => publisher.privilege === 'elder' || publisher.privilege === 'ministerialServant')
   }
   return active
 }
@@ -38,6 +40,7 @@ export function assignmentEmptyMessage(label: string) {
 
 export function qualifiesFor(publisher: QualifiedPublisher, field: RosterSlot) {
   if (publisher.status === 'inactive') return false
+  if (publisher.gender === 'feminino') return false
   const indicador = has(publisher, 'indicador')
   const microfone = has(publisher, 'microfone') || has(publisher, 'volante')
   const audio = publisher.som === true || has(publisher, 'audio')

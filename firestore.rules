@@ -74,6 +74,23 @@ service cloud.firestore {
           && 'elderlySupport' in profile().manageFlags);
     }
 
+    function managesTerritories() {
+      return isAdmin()
+        || (hasProfile()
+          && profile().congregationId is string
+          && profile().congregationId.size() > 0
+          && profile().manageFlags is list
+          && 'territories' in profile().manageFlags);
+    }
+
+    function territoryWritesConfig() {
+      return managesTerritories() && inCongregation(resource.data) && keepsCongregation();
+    }
+
+    function territoryCreates() {
+      return managesTerritories() && inCongregation(request.resource.data);
+    }
+
     function canReadAssignments(data) {
       return inCongregation(data);
     }
@@ -122,63 +139,64 @@ service cloud.firestore {
 
     match /territories/{territoryId} {
       allow read: if inCongregation(resource.data);
-      allow create: if adminCreates();
-      allow update: if adminWritesConfig();
-      allow delete: if isAdmin() && inCongregation(resource.data);
+      allow create: if territoryCreates();
+      allow update: if territoryWritesConfig();
+      allow delete: if managesTerritories() && inCongregation(resource.data);
     }
 
     match /segments/{segmentId} {
       allow read: if inCongregation(resource.data);
-      allow create: if adminCreates();
+      allow create: if territoryCreates();
       allow update: if inCongregation(resource.data)
         && keepsCongregation()
-        && (isAdmin() || segmentProgressOnly());
-      allow delete: if isAdmin() && inCongregation(resource.data);
+        && (managesTerritories() || segmentProgressOnly());
+      allow delete: if managesTerritories() && inCongregation(resource.data);
     }
 
     match /neighborhoods/{neighborhoodId} {
       allow read: if inCongregation(resource.data);
-      allow create: if adminCreates();
-      allow update: if adminWritesConfig();
-      allow delete: if isAdmin() && inCongregation(resource.data);
+      allow create: if territoryCreates();
+      allow update: if territoryWritesConfig();
+      allow delete: if managesTerritories() && inCongregation(resource.data);
     }
 
     match /meetingLocations/{locationId} {
       allow read: if inCongregation(resource.data);
-      allow create: if adminCreates();
-      allow update: if adminWritesConfig();
-      allow delete: if isAdmin() && inCongregation(resource.data);
+      allow create: if territoryCreates();
+      allow update: if territoryWritesConfig();
+      allow delete: if managesTerritories() && inCongregation(resource.data);
     }
 
     match /fieldGroups/{groupId} {
       allow read: if inCongregation(resource.data);
-      allow create: if adminCreates();
-      allow update: if adminWritesConfig();
-      allow delete: if isAdmin() && inCongregation(resource.data);
+      allow create: if territoryCreates();
+      allow update: if territoryWritesConfig();
+      allow delete: if managesTerritories() && inCongregation(resource.data);
     }
 
     match /preachingSessions/{sessionId} {
       allow read: if inCongregation(resource.data);
-      allow create: if adminCreates();
-      allow update: if adminWritesConfig();
-      allow delete: if isAdmin() && inCongregation(resource.data);
+      allow create: if territoryCreates();
+      allow update: if territoryWritesConfig();
+      allow delete: if managesTerritories() && inCongregation(resource.data);
     }
 
     match /assignments/{assignmentId} {
       allow read: if inCongregation(resource.data);
-      allow create: if adminCreates();
-      allow update: if adminWritesConfig();
-      allow delete: if isAdmin() && inCongregation(resource.data);
+      allow create: if territoryCreates();
+      allow update: if territoryWritesConfig();
+      allow delete: if managesTerritories() && inCongregation(resource.data);
     }
 
     match /workSessions/{sessionId} {
       allow read: if inCongregation(resource.data);
       allow create: if inCongregation(request.resource.data)
         && (
-          isAdmin()
+          managesTerritories()
           || request.resource.data.conductorId == request.auth.uid
         );
-      allow update, delete: if false;
+      allow update: if territoryWritesConfig();
+      allow delete: if managesTerritories() && inCongregation(resource.data);
     }
 
     match /announcements/{announcementId} {
@@ -192,6 +210,7 @@ service cloud.firestore {
       allow read: if inCongregation(resource.data)
         && (isAdmin()
           || managesPublishers()
+          || managesTerritories()
           || supervisesPublisher(resource.data)
           || (profile().accessFlags is list
             && 'publishers' in profile().accessFlags));
@@ -202,6 +221,7 @@ service cloud.firestore {
       allow read: if inCongregation(resource.data)
         && (isAdmin()
           || managesPublishers()
+          || managesTerritories()
           || (profile().accessFlags is list && 'publishers' in profile().accessFlags)
           || profile().supervisedGroupId == groupId);
       allow create, update, delete: if false;

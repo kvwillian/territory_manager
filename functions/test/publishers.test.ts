@@ -2,14 +2,19 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import {
   PublisherError,
+  bulkDeletePublishers,
+  bulkMovePublishers,
+  bulkUpdatePublishers,
   canManagePublishers,
   createPublisher,
   createPublisherGroup,
   deletePublisherGroup,
+  importPublisherGroups,
   listGroupMembers,
   listPublishers,
   setGroupSuperintendent,
   setPublisherGroup,
+  updatePublisherGroup,
   type PublisherCaller,
   type PublisherDeps,
   type PublisherGroupRecord,
@@ -169,4 +174,125 @@ test("releases members when a group is deleted and keeps the publishers", async 
   assert.equal((await store.deps().store.getPublisher(paulo.id))?.name, "Paulo Mendes")
   assert.equal((await store.deps().store.getPublisher(paulo.id))?.groupId, undefined)
   assert.equal(await store.deps().store.getGroup(group.id), null)
+})
+
+test("imports groups, superintendents, assistants, and publishers from JSON format", async () => {
+  const store = memory()
+  const result = await importPublisherGroups(store.deps(), adminCaller, {
+    prefixCode: true,
+    groups: [
+      {
+        code: "A",
+        name: "Laranjeiras",
+        superintendent: "Edilton Cusmão",
+        assistant: "João Aristeu",
+        publishers: ["Rosana Cusmão", "Ana Cláudia", "Djalma Fidêncio"],
+      },
+      {
+        code: "C",
+        name: "Guaíba",
+        superintendent: "José Bessa",
+        assistant: "Marcelo Nogareda",
+        publishers: ["Adriana Bessa", "Ana Beatriz?"],
+        notes: "Há nomes encobertos pelo reflexo entre Ana Beatriz e Zeni Ierich.",
+      },
+    ],
+  })
+  assert.equal(result.createdGroups, 2)
+  assert.equal(result.createdPublishers, 9)
+  assert.equal(result.groups[0]?.name, "A — Laranjeiras")
+  assert.equal(result.groups[1]?.description, "Há nomes encobertos pelo reflexo entre Ana Beatriz e Zeni Ierich.")
+  const djalma = result.publishers.find((item) => item.name === "Djalma Fidêncio")
+  const rosana = result.publishers.find((item) => item.name === "Rosana Cusmão")
+  assert.equal(djalma?.gender, "masculino")
+  assert.equal(rosana?.gender, "feminino")
+})
+
+test("moves and deletes publishers in bulk", async () => {
+  const store = memory()
+  const imported = await importPublisherGroups(store.deps(), adminCaller, {
+    prefixCode: true,
+    groups: [
+      {
+        code: "A",
+        name: "Laranjeiras",
+        superintendent: "Edilton Cusmão",
+        assistant: "João Aristeu",
+        publishers: ["Rosana Cusmão", "Djalma Fidêncio"],
+      },
+      {
+        code: "B",
+        name: "Montevidéu",
+        superintendent: "Carlos Alberto",
+        assistant: "Júlio César",
+        publishers: ["Juliete Silva"],
+      },
+    ],
+  })
+  const groupA = imported.groups.find((g) => g.name.startsWith("A"))!
+  const groupB = imported.groups.find((g) => g.name.startsWith("B"))!
+  const rosana = imported.publishers.find((p) => p.name === "Rosana Cusmão")!
+  const djalma = imported.publishers.find((p) => p.name === "Djalma Fidêncio")!
+
+  const moved = await bulkMovePublishers(store.deps(), adminCaller, {
+    publisherIds: [rosana.id, djalma.id],
+    groupId: groupB.id,
+  })
+  assert.equal(moved.movedCount, 2)
+  assert.equal(moved.publishers.find((p) => p.id === rosana.id)?.groupId, groupB.id)
+
+  const groupAMembers = moved.publishers.filter((p) => p.groupId === groupA.id).map((p) => p.id)
+  const deleted = await bulkDeletePublishers(store.deps(), adminCaller, {
+    publisherIds: groupAMembers,
+    deleteEmptyGroups: true,
+  })
+  assert.equal(deleted.deletedCount, 2)
+  assert.equal(deleted.deletedGroupsCount, 1)
+  assert.equal(deleted.groups.length, 1)
+  assert.equal(deleted.groups[0]?.id, groupB.id)
+})
+
+test("updates group name, superintendent, and assistant together", async () => {
+  const store = memory()
+  const sup1 = await createPublisher(store.deps(), adminCaller, { name: "Edilton Cusmão" })
+  const sup2 = await createPublisher(store.deps(), adminCaller, { name: "Carlos Alberto" })
+  const assist = await createPublisher(store.deps(), adminCaller, { name: "João Aristeu" })
+  const group = await createPublisherGroup(store.deps(), adminCaller, {
+    name: "Grupo A",
+    superintendentPublisherId: sup1.id,
+  })
+  const updated = await updatePublisherGroup(store.deps(), adminCaller, {
+    groupId: group.id,
+    name: "A — Laranjeiras",
+    superintendentPublisherId: sup2.id,
+    assistantPublisherId: assist.id,
+    description: "Observação atualizada",
+  })
+  assert.equal(updated.name, "A — Laranjeiras")
+  assert.equal(updated.superintendentPublisherId, sup2.id)
+  assert.equal(updated.assistantPublisherId, assist.id)
+  assert.equal(updated.description, "Observação atualizada")
+  assert.equal((await store.deps().store.getPublisher(sup2.id))?.groupId, group.id)
+  assert.equal((await store.deps().store.getPublisher(assist.id))?.groupId, group.id)
+})
+
+test("updates publisher qualifications in bulk", async () => {
+  const store = memory()
+  const p1 = await createPublisher(store.deps(), adminCaller, { name: "Edilton Cusmão" })
+  const p2 = await createPublisher(store.deps(), adminCaller, { name: "Rosana Cusmão", gender: "feminino" })
+
+  const res = await bulkUpdatePublishers(store.deps(), adminCaller, {
+    updates: [
+      { publisherId: p1.id, indicador: true, microfone: true, som: true, driver: true },
+      { publisherId: p2.id, estudante: true, needsElderlySupport: true },
+    ],
+  })
+  assert.equal(res.updatedCount, 2)
+  const savedP1 = res.publishers.find((p) => p.id === p1.id)!
+  const savedP2 = res.publishers.find((p) => p.id === p2.id)!
+  assert.equal(savedP1.indicador, true)
+  assert.equal(savedP1.som, true)
+  assert.equal(savedP1.driver, true)
+  assert.equal(savedP2.estudante, true)
+  assert.equal(savedP2.needsElderlySupport, true)
 })

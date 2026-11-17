@@ -384,6 +384,20 @@ final routerProvider = Provider<GoRouter>((ref) {
                 ),
               ),
               GoRoute(
+                path: 'elderly-support',
+                builder: (context, state) => const ShellRouteConfig(
+                  title: 'Suporte a idosos',
+                  child: ElderlySupportScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'qualifications',
+                builder: (context, state) => const ShellRouteConfig(
+                  title: 'Habilitações',
+                  child: PublisherQualificationsScreen(),
+                ),
+              ),
+              GoRoute(
                 path: 'publisher-groups',
                 builder: (context, state) => const ShellRouteConfig(
                   title: 'Grupos',

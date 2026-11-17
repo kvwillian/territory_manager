@@ -5,6 +5,7 @@ class CongregationModel {
     required this.name,
     required this.city,
     required this.country,
+    this.state,
     this.createdAt,
     this.createdBy,
     this.midweekWeekday,
@@ -17,6 +18,7 @@ class CongregationModel {
   final String name;
   final String city;
   final String country;
+  final String? state;
   final DateTime? createdAt;
   final String? createdBy;
 
@@ -32,6 +34,7 @@ class CongregationModel {
     String? name,
     String? city,
     String? country,
+    String? state,
     DateTime? createdAt,
     String? createdBy,
     int? midweekWeekday,
@@ -44,6 +47,7 @@ class CongregationModel {
       name: name ?? this.name,
       city: city ?? this.city,
       country: country ?? this.country,
+      state: state ?? this.state,
       createdAt: createdAt ?? this.createdAt,
       createdBy: createdBy ?? this.createdBy,
       midweekWeekday: midweekWeekday ?? this.midweekWeekday,
@@ -59,6 +63,7 @@ class CongregationModel {
       'name': name,
       'city': city,
       'country': country,
+      if (state != null && state!.isNotEmpty) 'state': state,
       'createdAt': createdAt?.toIso8601String(),
       'createdBy': createdBy,
       'midweekWeekday': midweekWeekday,
@@ -69,11 +74,16 @@ class CongregationModel {
   }
 
   factory CongregationModel.fromMap(Map<String, dynamic> map) {
+    final rawState = map['state'] ?? map['estado'] ?? map['uf'];
+    final stateText = rawState is String && rawState.trim().isNotEmpty
+        ? rawState.trim()
+        : null;
     return CongregationModel(
       id: map['id'] as String,
       name: map['name'] as String,
       city: map['city'] as String,
       country: map['country'] as String,
+      state: stateText,
       createdAt: map['createdAt'] != null
           ? DateTime.tryParse(map['createdAt'] as String)
           : null,

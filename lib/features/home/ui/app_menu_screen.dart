@@ -18,8 +18,14 @@ class AppMenuScreen extends ConsumerWidget {
     }
     final user = auth.user;
     final items = <_MenuItem>[
-      if (user.canAccess(AccessFlags.publishers))
+      if (user.canAccess(AccessFlags.publishers)) ...[
         const _MenuItem(Icons.people_outline, 'Publicadores', '/publishers'),
+        const _MenuItem(
+          Icons.checklist_rtl_outlined,
+          'Habilitações de designação',
+          '/qualifications',
+        ),
+      ],
       ...user.isAdmin ? _adminItems : _conductorItems,
     ];
 
@@ -74,6 +80,11 @@ const _adminItems = [
   _MenuItem(Icons.event_outlined, 'Horários das reuniões', '/congregation'),
   _MenuItem(Icons.groups_outlined, 'Grupos de publicadores', '/publisher-groups'),
   _MenuItem(Icons.mic_none_outlined, 'Áudio e vídeo', '/audio-video'),
+  _MenuItem(
+    Icons.directions_car_outlined,
+    'Suporte a idosos',
+    '/elderly-support',
+  ),
   _MenuItem(Icons.cleaning_services_outlined, 'Limpeza', '/cleaning'),
   _MenuItem(Icons.location_city_outlined, 'Bairros', '/admin/bairros'),
   _MenuItem(Icons.place_outlined, 'Locais de saída', '/admin/meeting-locations'),
@@ -87,6 +98,11 @@ const _conductorItems = [
   _MenuItem(Icons.event_outlined, 'Horários das reuniões', '/congregation'),
   _MenuItem(Icons.groups_outlined, 'Grupos de publicadores', '/publisher-groups'),
   _MenuItem(Icons.mic_none_outlined, 'Áudio e vídeo', '/audio-video'),
+  _MenuItem(
+    Icons.directions_car_outlined,
+    'Suporte a idosos',
+    '/elderly-support',
+  ),
   _MenuItem(Icons.cleaning_services_outlined, 'Limpeza', '/cleaning'),
   _MenuItem(Icons.history, 'Histórico', '/history'),
 ];

@@ -34,6 +34,7 @@ const items = [
       { to: '/designacoes/audio-video', label: 'Áudio e Vídeo' },
       { to: '/designacoes/idosos', label: 'Suporte a Idosos' },
       { to: '/designacoes/limpeza', label: 'Limpeza' },
+      { to: '/designacoes/habilitacoes', label: 'Habilitações' },
     ],
   },
   { to: '/publicadores', label: 'Publicadores', icon: Users },
@@ -46,12 +47,16 @@ function crumbsFor(pathname: string) {
   if (pathname.startsWith('/designacoes/audio-video')) return ['Designações', 'Áudio e Vídeo']
   if (pathname.startsWith('/designacoes/idosos')) return ['Designações', 'Suporte a Idosos']
   if (pathname.startsWith('/designacoes/limpeza')) return ['Designações', 'Limpeza']
+  if (pathname.startsWith('/designacoes/habilitacoes')) return ['Designações', 'Funções e habilitações']
   if (pathname.startsWith('/designacoes')) return ['Designações', 'Reuniões']
   if (pathname.startsWith('/agenda')) return ['Agenda']
   if (pathname.startsWith('/publicadores/grupos')) return ['Publicadores', 'Grupos']
   if (pathname.startsWith('/publicadores/estatisticas')) return ['Publicadores', 'Estatísticas']
   if (pathname.startsWith('/publicadores')) return ['Publicadores', 'Lista']
-  if (pathname.startsWith('/territorios')) return ['Territórios']
+  if (pathname.startsWith('/territorios/lista')) return ['Territórios', 'Territórios']
+  if (pathname.startsWith('/territorios/locais')) return ['Territórios', 'Locais de saída']
+  if (pathname.startsWith('/territorios/historico')) return ['Territórios', 'Histórico']
+  if (pathname.startsWith('/territorios')) return ['Territórios', 'Designações']
   if (pathname.startsWith('/relatorios')) return ['Relatórios']
   if (pathname.startsWith('/configuracoes')) return ['Configurações']
   return ['Início']

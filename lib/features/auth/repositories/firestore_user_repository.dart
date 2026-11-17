@@ -62,9 +62,14 @@ class FirestoreUserRepository implements UserRepository {
   }
 
   @override
-  Future<void> updateAccessFlags(String id, List<String> flags) async {
+  Future<void> updateAccessFlags(
+    String id,
+    List<String> flags, {
+    List<String>? manageFlags,
+  }) async {
     await _firestore.collection(_collection).doc(id).update({
       'accessFlags': flags,
+      if (manageFlags != null) 'manageFlags': manageFlags,
     });
   }
 
@@ -75,17 +80,10 @@ class FirestoreUserRepository implements UserRepository {
 
   UserModel _docToUser(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data()!;
-    return UserModel(
-      id: doc.id,
-      name: data['name'] as String,
-      role: UserRole.values.firstWhere(
-        (e) => e.name == data['role'],
-        orElse: () => UserRole.conductor,
-      ),
-      email: data['email'] as String?,
-      congregationId: data['congregationId'] as String? ?? defaultCongregationId,
-      mustChangePassword: data['mustChangePassword'] == true,
-      accessFlags: accessFlagsFromMap(data),
-    );
+    return UserModel.fromMap({
+      ...data,
+      'id': doc.id,
+      'congregationId': data['congregationId'] as String? ?? defaultCongregationId,
+    });
   }
 }
