@@ -1,4 +1,17 @@
-import { AlertTriangle, Check, Copy, Download, Eye, FileJson, History, RotateCcw, Trash2, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  ClipboardCheck,
+  Copy,
+  Download,
+  Eye,
+  FileJson,
+  History,
+  RotateCcw,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { addDays, isoFromDate } from '../../../domain/dates'
 import { buildTerritoryHistoryCsv } from '../historyExportCsv'
@@ -12,7 +25,7 @@ import {
   weekdayLabelShort,
 } from '../status'
 import { useTerritories } from '../store'
-import type { TerritoryAssignmentRecord } from '../types'
+import type { TerritoryAssignmentRecord, TerritoryRecord } from '../types'
 import { buildTerritoryWhatsappMessage } from '../whatsapp'
 import { HistoryImportModal } from './HistoryImportModal'
 import { DeparturePeriodBadge } from './SharedPieces'
@@ -33,9 +46,18 @@ export function TerritoryHistoryTab({
     segments,
     assignments,
     workSessions,
+    resolveConductors,
+    recordTerritoryExecution,
     clearHistory,
   } = useTerritories()
 
+  const [historyView, setHistoryView] = useState<'timeline' | 'feedback'>('timeline')
+  const [feedbackFilter, setFeedbackFilter] = useState<'pending' | 'all'>('pending')
+  const [execDoneByKey, setExecDoneByKey] = useState<Record<string, string[]>>({})
+  const [execPartialByKey, setExecPartialByKey] = useState<Record<string, boolean>>({})
+  const [execCommentByKey, setExecCommentByKey] = useState<Record<string, string>>({})
+  const [savingExecKey, setSavingExecKey] = useState<string | null>(null)
+  const [feedbackBannerMsg, setFeedbackBannerMsg] = useState('')
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('30d')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -237,8 +259,168 @@ export function TerritoryHistoryTab({
     URL.revokeObjectURL(url)
   }
 
+  function feedbackKey(assignmentId: string, territoryId: string) {
+    return `${assignmentId}::${territoryId}`
+  }
+
+  const finalizedAssignments = useMemo(() => {
+    const sessionsByDateTerritory = new Set(
+      workSessions.map((ws) => `${ws.isoDate}::${ws.territoryId}`),
+    )
+    return assignments
+      .filter((a) => a.status === 'assigned' && a.territoryIds.length > 0)
+      .map((a) => {
+        const pendingCount = a.territoryIds.filter(
+          (tid) => !sessionsByDateTerritory.has(`${a.isoDate}::${tid}`),
+        ).length
+        return {
+          assignment: a,
+          hasPending: pendingCount > 0,
+          pendingCount,
+        }
+      })
+      .sort((a, b) => {
+        if (a.assignment.isoDate !== b.assignment.isoDate) {
+          return b.assignment.isoDate.localeCompare(a.assignment.isoDate)
+        }
+        return b.assignment.startTime.localeCompare(a.assignment.startTime)
+      })
+  }, [assignments, workSessions])
+
+  const pendingFeedbackCount = useMemo(
+    () => finalizedAssignments.filter((item) => item.hasPending).length,
+    [finalizedAssignments],
+  )
+
+  const visibleFeedbackAssignments = useMemo(
+    () =>
+      feedbackFilter === 'pending'
+        ? finalizedAssignments.filter((item) => item.hasPending)
+        : finalizedAssignments,
+    [finalizedAssignments, feedbackFilter],
+  )
+
+  const workSessionByDateTerritory = useMemo(() => {
+    const map = new Map<string, (typeof workSessions)[number]>()
+    for (const ws of workSessions) {
+      map.set(`${ws.isoDate}::${ws.territoryId}`, ws)
+    }
+    return map
+  }, [workSessions])
+
+  async function handleConfirmFeedback(
+    assignment: TerritoryAssignmentRecord,
+    territory: TerritoryRecord,
+  ) {
+    const key = feedbackKey(assignment.id, territory.id)
+    const terrSegments = segments.filter((s) => s.territoryId === territory.id)
+    const existingSession = workSessionByDateTerritory.get(
+      `${assignment.isoDate}::${territory.id}`,
+    )
+
+    const defaultIds = existingSession
+      ? existingSession.segmentsWorked
+      : assignment.assignedSegmentsByTerritory?.[territory.id] &&
+          assignment.assignedSegmentsByTerritory[territory.id].length > 0
+        ? assignment.assignedSegmentsByTerritory[territory.id]
+        : terrSegments.map((s) => s.id)
+
+    const doneIds = execDoneByKey[key] ?? defaultIds
+    const isPartial =
+      execPartialByKey[key] ?? existingSession?.completionState === 'partial'
+    const comment = (execCommentByKey[key] ?? existingSession?.notes ?? '').trim()
+
+    const doneSet = new Set(doneIds)
+    const pendingIds = terrSegments
+      .filter((s) => !doneSet.has(s.id) && !doneSet.has(s.description))
+      .map((s) => s.id)
+
+    const completionState =
+      isPartial || (terrSegments.length > 0 && pendingIds.length > 0)
+        ? 'partial'
+        : 'completed'
+
+    const resolved = resolveConductors(assignment.conductorNames)
+
+    setSavingExecKey(key)
+    try {
+      await recordTerritoryExecution({
+        territoryId: territory.id,
+        isoDate: assignment.isoDate,
+        conductorName: assignment.conductorNames.join(', '),
+        conductorUserId: resolved.userIds[0] ?? null,
+        conductorPublisherId: resolved.publisherIds[0] ?? null,
+        completedSegmentIds: doneIds,
+        pendingSegmentIds: pendingIds,
+        completionState,
+        notes: comment,
+        regionId: territory.regionId,
+        regionName: territory.regionName,
+        territoryCodeRaw: territory.code,
+      })
+      setFeedbackBannerMsg(
+        `Retorno registrado para o território ${territory.code} em ${formatShortDayMonth(
+          assignment.isoDate,
+        )}.`,
+      )
+    } finally {
+      setSavingExecKey(null)
+    }
+  }
+
   return (
     <div className="space-y-4">
+      {/* Sub-tab Switcher */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-line bg-white px-4 py-2.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setHistoryView('timeline')}
+            className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
+              historyView === 'timeline'
+                ? 'bg-indigo text-white shadow-xs'
+                : 'text-muted hover:bg-[#F8FAFC] hover:text-ink'
+            }`}
+          >
+            <History size={14} />
+            Linha do tempo
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                historyView === 'timeline'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-[#F1F5F9] text-ink'
+              }`}
+            >
+              {filteredRows.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setHistoryView('feedback')}
+            className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
+              historyView === 'feedback'
+                ? 'bg-indigo text-white shadow-xs'
+                : 'text-muted hover:bg-[#F8FAFC] hover:text-ink'
+            }`}
+          >
+            <ClipboardCheck size={14} />
+            Retorno do dirigente
+            {pendingFeedbackCount > 0 ? (
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                  historyView === 'feedback'
+                    ? 'bg-[#FEF08A] text-[#854D0E]'
+                    : 'bg-[#FEF3C7] text-[#92400E]'
+                }`}
+              >
+                {pendingFeedbackCount}
+              </span>
+            ) : null}
+          </button>
+        </div>
+      </div>
+
       {clearBannerMsg ? (
         <div className="flex items-center justify-between rounded-2xl border border-[#BBF7D0] bg-[#F0FDF4] px-4 py-3 text-xs font-semibold text-[#166534]">
           <span>{clearBannerMsg}</span>
@@ -248,7 +430,18 @@ export function TerritoryHistoryTab({
         </div>
       ) : null}
 
-      {/* Filters Card */}
+      {feedbackBannerMsg ? (
+        <div className="flex items-center justify-between rounded-2xl border border-[#BBF7D0] bg-[#F0FDF4] px-4 py-3 text-xs font-semibold text-[#166534]">
+          <span>{feedbackBannerMsg}</span>
+          <button type="button" onClick={() => setFeedbackBannerMsg('')}>
+            <X size={15} />
+          </button>
+        </div>
+      ) : null}
+
+      {historyView === 'timeline' ? (
+        <>
+          {/* Filters Card */}
       <div className="rounded-2xl border border-line bg-white p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
           <div>
@@ -530,6 +723,248 @@ export function TerritoryHistoryTab({
           </div>
         )}
       </div>
+        </>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-white p-4">
+            <div>
+              <h3 className="text-sm font-semibold text-ink">
+                Retorno do dirigente — O que foi feito no campo
+              </h3>
+              <p className="mt-0.5 text-xs text-muted">
+                Registre os segmentos trabalhados e observações das saídas já finalizadas.
+              </p>
+            </div>
+
+            <div className="inline-flex items-center gap-1 rounded-xl border border-line bg-[#F8FAFC] p-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setFeedbackFilter('pending')}
+                className={`rounded-lg px-3 py-1.5 font-semibold transition ${
+                  feedbackFilter === 'pending'
+                    ? 'bg-white text-ink shadow-2xs'
+                    : 'text-muted hover:text-ink'
+                }`}
+              >
+                Pendentes ({pendingFeedbackCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFeedbackFilter('all')}
+                className={`rounded-lg px-3 py-1.5 font-semibold transition ${
+                  feedbackFilter === 'all'
+                    ? 'bg-white text-ink shadow-2xs'
+                    : 'text-muted hover:text-ink'
+                }`}
+              >
+                Todas ({finalizedAssignments.length})
+              </button>
+            </div>
+          </div>
+
+          {visibleFeedbackAssignments.length === 0 ? (
+            <div className="rounded-2xl border border-line bg-white px-6 py-12 text-center">
+              <CheckCircle2 size={28} className="mx-auto text-[#16A34A]" />
+              <p className="mt-3 text-sm font-semibold text-ink">
+                {feedbackFilter === 'pending'
+                  ? 'Nenhuma designação pendente de retorno'
+                  : 'Nenhuma designação finalizada encontrada'}
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                {feedbackFilter === 'pending'
+                  ? 'Todas as saídas finalizadas já tiveram o retorno registrado.'
+                  : 'Finalize uma saída na aba Designações para registrar o retorno aqui.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {visibleFeedbackAssignments.map(({ assignment }) => (
+                <div
+                  key={assignment.id}
+                  className="rounded-2xl border border-line bg-white p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-bold text-ink">
+                        {formatFullDateBr(assignment.isoDate)}
+                      </span>
+                      <DeparturePeriodBadge periodType={assignment.periodType} />
+                      <span className="rounded-full border border-line bg-[#F8FAFC] px-2.5 py-0.5 text-xs font-medium text-ink">
+                        {assignment.locationName} • {assignment.startTime}
+                      </span>
+                      {assignment.groupName ? (
+                        <span className="rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-2.5 py-0.5 text-xs font-semibold text-[#4338CA]">
+                          {assignment.groupName}
+                        </span>
+                      ) : null}
+                    </div>
+                    <span className="text-xs font-medium text-muted">
+                      Dirigentes:{' '}
+                      <strong className="text-ink">
+                        {assignment.conductorNames.length > 0
+                          ? assignment.conductorNames.join(', ')
+                          : 'Não definido'}
+                      </strong>
+                    </span>
+                  </div>
+
+                  <div className="mt-3 space-y-3">
+                    {assignment.territoryIds.map((tid) => {
+                      const t = territoriesById.get(tid)
+                      if (!t) return null
+                      const key = feedbackKey(assignment.id, t.id)
+                      const terrSegments = segments.filter((s) => s.territoryId === t.id)
+                      const existingSession = workSessionByDateTerritory.get(
+                        `${assignment.isoDate}::${t.id}`,
+                      )
+
+                      const defaultIds = existingSession
+                        ? existingSession.segmentsWorked
+                        : assignment.assignedSegmentsByTerritory?.[t.id] &&
+                            assignment.assignedSegmentsByTerritory[t.id].length > 0
+                          ? assignment.assignedSegmentsByTerritory[t.id]
+                          : terrSegments.map((s) => s.id)
+
+                      const doneIds = execDoneByKey[key] ?? defaultIds
+                      const doneSet = new Set(doneIds)
+                      const isPartial =
+                        execPartialByKey[key] ??
+                        existingSession?.completionState === 'partial'
+                      const comment =
+                        execCommentByKey[key] ?? existingSession?.notes ?? ''
+
+                      return (
+                        <div
+                          key={t.id}
+                          className="rounded-xl border border-line bg-[#F8FAFC] p-3"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="inline-flex items-center gap-1 rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-2.5 py-0.5 text-xs font-bold text-[#4338CA]">
+                                {t.code}
+                                <span className="font-normal text-[#6366F1]">
+                                  ({t.regionName})
+                                </span>
+                              </span>
+
+                              {existingSession ? (
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                    existingSession.completionState === 'partial'
+                                      ? 'bg-[#FEF3C7] text-[#92400E]'
+                                      : 'bg-[#DCFCE7] text-[#166534]'
+                                  }`}
+                                >
+                                  {existingSession.completionState === 'partial'
+                                    ? 'Registrado (Parcial)'
+                                    : 'Registrado (Concluído)'}
+                                </span>
+                              ) : (
+                                <span className="rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold text-[#92400E]">
+                                  Aguardando retorno
+                                </span>
+                              )}
+                            </div>
+
+                            <label className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-[#1E40AF]">
+                              <input
+                                type="checkbox"
+                                disabled={!canManage}
+                                checked={isPartial}
+                                onChange={(e) =>
+                                  setExecPartialByKey((prev) => ({
+                                    ...prev,
+                                    [key]: e.target.checked,
+                                  }))
+                                }
+                                className="h-3.5 w-3.5 accent-indigo"
+                              />
+                              Feito pela metade / parcial
+                            </label>
+                          </div>
+
+                          {terrSegments.length > 0 ? (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {terrSegments.map((seg) => {
+                                const isDone =
+                                  doneSet.has(seg.id) || doneSet.has(seg.description)
+                                return (
+                                  <label
+                                    key={seg.id}
+                                    className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
+                                      isDone
+                                        ? 'border-[#86EFAC] bg-[#DCFCE7] text-[#166534]'
+                                        : 'border-line bg-white text-muted'
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      disabled={!canManage}
+                                      checked={isDone}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked
+                                        setExecDoneByKey((prev) => {
+                                          const base = prev[key] ?? defaultIds
+                                          return {
+                                            ...prev,
+                                            [key]: checked
+                                              ? [...new Set([...base, seg.id])]
+                                              : base.filter(
+                                                  (id) =>
+                                                    id !== seg.id && id !== seg.description,
+                                                ),
+                                          }
+                                        })
+                                      }}
+                                      className="h-3.5 w-3.5 accent-[#16A34A]"
+                                    />
+                                    <span>{seg.description}</span>
+                                  </label>
+                                )
+                              })}
+                            </div>
+                          ) : null}
+
+                          <div className="mt-2.5 flex flex-col gap-2 sm:flex-row">
+                            <input
+                              type="text"
+                              disabled={!canManage}
+                              value={comment}
+                              onChange={(e) =>
+                                setExecCommentByKey((prev) => ({
+                                  ...prev,
+                                  [key]: e.target.value,
+                                }))
+                              }
+                              placeholder={`Comentário (ex.: fizemos ${t.code}A e ${t.code}B; ${t.code}B ficou pela metade)`}
+                              className="h-8 flex-1 rounded-lg border border-line bg-white px-2.5 text-xs text-ink outline-none focus:border-indigo disabled:bg-[#F1F5F9]"
+                            />
+                            {canManage ? (
+                              <button
+                                type="button"
+                                disabled={savingExecKey === key}
+                                onClick={() => void handleConfirmFeedback(assignment, t)}
+                                className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg bg-[#16A34A] px-3 text-xs font-semibold text-white hover:bg-[#15803D] disabled:opacity-50"
+                              >
+                                <Check size={13} />
+                                {savingExecKey === key
+                                  ? 'Salvando...'
+                                  : existingSession
+                                    ? 'Atualizar retorno'
+                                    : 'Confirmar feito'}
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Details Drawer */}
       {selectedEntry ? (
