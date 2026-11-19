@@ -28,7 +28,10 @@ import type {
   WorkSessionRecord,
 } from '../src/features/territories/types.ts'
 import { buildTerritoryWhatsappMessage } from '../src/features/territories/whatsapp.ts'
-import { buildTerritoryHistoryCsv } from '../src/features/territories/historyExportCsv.ts'
+import {
+  buildTerritoryHistoryCsv,
+  buildTerritoryHistoryTxt,
+} from '../src/features/territories/historyExportCsv.ts'
 
 function mkTerritory(id: string, code: string, regionName = 'Laranjeiras'): TerritoryRecord {
   const parsed = parseTerritoryCode(code)
@@ -749,4 +752,81 @@ test('exports territory history timeline entries to valid escaped CSV with segme
 
   assert.ok(csv.startsWith('\uFEFFData,'))
   assert.ok(csv.includes('2026-11-10,,Execução,morning,Guaíba,Guaíba,"Julio, Cesar",26,26A,partial,"Obs: ""teste""",10.11 - Julio, Cesar - 26A (parte)'.replace('10.11 - Julio, Cesar - 26A (parte)', '"10.11 - Julio, Cesar - 26A (parte)"')))
+})
+
+test('exports territory history timeline entries to plain text grouped by month', () => {
+  const territoriesById = new Map<string, TerritoryRecord>([
+    ['t-1', mkTerritory('t-1', '01')],
+    ['t-2', mkTerritory('t-2', '02')],
+  ])
+  const segmentsById = new Map<string, TerritorySegmentRecord>([
+    [
+      'seg-01a',
+      {
+        id: 'seg-01a',
+        congregationId: 'cong-1',
+        territoryId: 't-1',
+        description: '01A',
+        status: 'completed',
+        lastWorkedIsoDate: '2026-11-01',
+      },
+    ],
+  ])
+  const workSessionsById = new Map<string, WorkSessionRecord>([
+    [
+      'ws-1',
+      {
+        id: 'ws-1',
+        congregationId: 'cong-1',
+        territoryId: 't-1',
+        conductorUserId: '',
+        conductorName: 'Marcelo',
+        isoDate: '2026-11-01',
+        segmentsWorked: ['seg-01a'],
+        notes: '',
+        completionState: 'completed',
+      },
+    ],
+  ])
+
+  const txt = buildTerritoryHistoryTxt({
+    territoriesById,
+    segmentsById,
+    workSessionsById,
+    entries: [
+      {
+        id: 'ws-1',
+        kind: 'workSession',
+        isoDate: '2026-11-01',
+        locationId: null,
+        locationName: 'Salão',
+        periodType: 'morning',
+        conductorNames: ['Marcelo'],
+        territoryIds: ['t-1'],
+        territoryCodes: ['01'],
+        executedTerritoryIds: ['t-1'],
+        completionState: 'completed',
+        notes: '',
+      },
+      {
+        id: 'ws-2',
+        kind: 'workSession',
+        isoDate: '2026-10-25',
+        locationId: null,
+        locationName: 'Salão',
+        periodType: 'sunday',
+        conductorNames: ['Eber'],
+        territoryIds: ['t-2'],
+        territoryCodes: ['02'],
+        executedTerritoryIds: ['t-2'],
+        completionState: 'completed',
+        notes: '',
+      },
+    ],
+  })
+
+  assert.equal(
+    txt,
+    '---- Outubro ----\n\n25/10 - Eber - 02\n\n---- Novembro ----\n\n01/11 - Marcelo - 01A',
+  )
 })

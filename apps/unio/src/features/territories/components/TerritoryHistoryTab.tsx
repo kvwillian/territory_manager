@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  CalendarDays,
   Check,
   CheckCircle2,
   ClipboardCheck,
@@ -7,6 +8,7 @@ import {
   Download,
   Eye,
   FileJson,
+  FileText,
   History,
   RotateCcw,
   Trash2,
@@ -14,7 +16,10 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { addDays, isoFromDate } from '../../../domain/dates'
-import { buildTerritoryHistoryCsv } from '../historyExportCsv'
+import {
+  buildTerritoryHistoryCsv,
+  buildTerritoryHistoryTxt,
+} from '../historyExportCsv'
 import {
   buildTerritoryTimeline,
   formatFullDateBr,
@@ -25,7 +30,7 @@ import {
   weekdayLabelShort,
 } from '../status'
 import { useTerritories } from '../store'
-import type { TerritoryAssignmentRecord, TerritoryRecord } from '../types'
+import type { TerritoryAssignmentRecord } from '../types'
 import { buildTerritoryWhatsappMessage } from '../whatsapp'
 import { HistoryImportModal } from './HistoryImportModal'
 import { DeparturePeriodBadge } from './SharedPieces'
@@ -51,12 +56,17 @@ export function TerritoryHistoryTab({
     clearHistory,
   } = useTerritories()
 
-  const [historyView, setHistoryView] = useState<'timeline' | 'feedback'>('timeline')
+  const [historyView, setHistoryView] = useState<
+    'confirmed' | 'assignments' | 'feedback'
+  >('confirmed')
   const [feedbackFilter, setFeedbackFilter] = useState<'pending' | 'all'>('pending')
+  const [execOutcomeByKey, setExecOutcomeByKey] = useState<
+    Record<string, 'completed' | 'partial' | 'skipped'>
+  >({})
   const [execDoneByKey, setExecDoneByKey] = useState<Record<string, string[]>>({})
   const [execPartialByKey, setExecPartialByKey] = useState<Record<string, boolean>>({})
   const [execCommentByKey, setExecCommentByKey] = useState<Record<string, string>>({})
-  const [savingExecKey, setSavingExecKey] = useState<string | null>(null)
+  const [savingAssignmentId, setSavingAssignmentId] = useState<string | null>(null)
   const [feedbackBannerMsg, setFeedbackBannerMsg] = useState('')
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('30d')
   const [customFrom, setCustomFrom] = useState('')
@@ -197,6 +207,18 @@ export function TerritoryHistoryTab({
     assignmentsById,
   ])
 
+  const confirmedRows = useMemo(
+    () => filteredRows.filter((entry) => entry.kind === 'workSession'),
+    [filteredRows],
+  )
+
+  const assignmentRows = useMemo(
+    () => filteredRows.filter((entry) => entry.kind === 'assignment'),
+    [filteredRows],
+  )
+
+  const visibleRows = historyView === 'assignments' ? assignmentRows : confirmedRows
+
   const hasActiveFilters =
     Boolean(locationFilter) ||
     Boolean(conductorFilter) ||
@@ -244,7 +266,7 @@ export function TerritoryHistoryTab({
 
   function handleExportCsv() {
     const csv = buildTerritoryHistoryCsv({
-      entries: filteredRows,
+      entries: visibleRows,
       territoriesById,
       segmentsById,
       assignmentsById,
@@ -255,6 +277,23 @@ export function TerritoryHistoryTab({
     const link = document.createElement('a')
     link.href = url
     link.download = `historico_territorios_${todayIso}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function handleExportTxt() {
+    const txt = buildTerritoryHistoryTxt({
+      entries: visibleRows,
+      territoriesById,
+      segmentsById,
+      assignmentsById,
+      workSessionsById,
+    })
+    const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `historico_territorios_${todayIso}.txt`
     link.click()
     URL.revokeObjectURL(url)
   }
@@ -308,63 +347,85 @@ export function TerritoryHistoryTab({
     return map
   }, [workSessions])
 
-  async function handleConfirmFeedback(
+  function getAssignedSegmentIds(
     assignment: TerritoryAssignmentRecord,
-    territory: TerritoryRecord,
+    territoryId: string,
   ) {
-    const key = feedbackKey(assignment.id, territory.id)
-    const terrSegments = segments.filter((s) => s.territoryId === territory.id)
-    const existingSession = workSessionByDateTerritory.get(
-      `${assignment.isoDate}::${territory.id}`,
-    )
+    const terrSegments = segments.filter((s) => s.territoryId === territoryId)
+    const assigned = assignment.assignedSegmentsByTerritory?.[territoryId]
+    if (assigned && assigned.length > 0) return assigned
+    return terrSegments.map((s) => s.id)
+  }
 
-    const defaultIds = existingSession
-      ? existingSession.segmentsWorked
-      : assignment.assignedSegmentsByTerritory?.[territory.id] &&
-          assignment.assignedSegmentsByTerritory[territory.id].length > 0
-        ? assignment.assignedSegmentsByTerritory[territory.id]
-        : terrSegments.map((s) => s.id)
-
-    const doneIds = execDoneByKey[key] ?? defaultIds
-    const isPartial =
-      execPartialByKey[key] ?? existingSession?.completionState === 'partial'
-    const comment = (execCommentByKey[key] ?? existingSession?.notes ?? '').trim()
-
-    const doneSet = new Set(doneIds)
-    const pendingIds = terrSegments
-      .filter((s) => !doneSet.has(s.id) && !doneSet.has(s.description))
-      .map((s) => s.id)
-
-    const completionState =
-      isPartial || (terrSegments.length > 0 && pendingIds.length > 0)
-        ? 'partial'
-        : 'completed'
-
+  async function handleConfirmDepartureFeedback(assignment: TerritoryAssignmentRecord) {
     const resolved = resolveConductors(assignment.conductorNames)
-
-    setSavingExecKey(key)
+    setSavingAssignmentId(assignment.id)
+    let savedCount = 0
     try {
-      await recordTerritoryExecution({
-        territoryId: territory.id,
-        isoDate: assignment.isoDate,
-        conductorName: assignment.conductorNames.join(', '),
-        conductorUserId: resolved.userIds[0] ?? null,
-        conductorPublisherId: resolved.publisherIds[0] ?? null,
-        completedSegmentIds: doneIds,
-        pendingSegmentIds: pendingIds,
-        completionState,
-        notes: comment,
-        regionId: territory.regionId,
-        regionName: territory.regionName,
-        territoryCodeRaw: territory.code,
-      })
-      setFeedbackBannerMsg(
-        `Retorno registrado para o território ${territory.code} em ${formatShortDayMonth(
-          assignment.isoDate,
-        )}.`,
-      )
+      for (const tid of assignment.territoryIds) {
+        const territory = territoriesById.get(tid)
+        if (!territory) continue
+        const key = feedbackKey(assignment.id, territory.id)
+        const existingSession = workSessionByDateTerritory.get(
+          `${assignment.isoDate}::${territory.id}`,
+        )
+        const defaultOutcome: 'completed' | 'partial' | 'skipped' =
+          existingSession?.completionState === 'partial' ? 'partial' : 'completed'
+        const outcome = execOutcomeByKey[key] ?? defaultOutcome
+        if (outcome === 'skipped') continue
+
+        const terrSegments = segments.filter((s) => s.territoryId === territory.id)
+        const assignedIds = getAssignedSegmentIds(assignment, territory.id)
+
+        const doneIds =
+          outcome === 'completed'
+            ? assignedIds
+            : execDoneByKey[key] ??
+              (existingSession ? existingSession.segmentsWorked : assignedIds)
+
+        const doneSet = new Set(doneIds)
+        const pendingIds = terrSegments
+          .filter((s) => !doneSet.has(s.id) && !doneSet.has(s.description))
+          .map((s) => s.id)
+
+        const isPartialFlag =
+          outcome === 'partial' &&
+          (execPartialByKey[key] ?? existingSession?.completionState === 'partial')
+        const completionState =
+          outcome === 'partial' && (isPartialFlag || pendingIds.length > 0 || terrSegments.length === 0)
+            ? 'partial'
+            : pendingIds.length > 0 && terrSegments.length > 0
+              ? 'partial'
+              : 'completed'
+
+        const comment = (execCommentByKey[key] ?? existingSession?.notes ?? '').trim()
+
+        await recordTerritoryExecution({
+          territoryId: territory.id,
+          isoDate: assignment.isoDate,
+          conductorName: assignment.conductorNames.join(', '),
+          conductorUserId: resolved.userIds[0] ?? null,
+          conductorPublisherId: resolved.publisherIds[0] ?? null,
+          completedSegmentIds: doneIds,
+          pendingSegmentIds: pendingIds,
+          completionState,
+          notes: comment,
+          regionId: territory.regionId,
+          regionName: territory.regionName,
+          territoryCodeRaw: territory.code,
+        })
+        savedCount += 1
+      }
+
+      if (savedCount > 0) {
+        setFeedbackBannerMsg(
+          `Retorno confirmado para ${savedCount} território(s) da saída de ${formatShortDayMonth(
+            assignment.isoDate,
+          )}.`,
+        )
+      }
     } finally {
-      setSavingExecKey(null)
+      setSavingAssignmentId(null)
     }
   }
 
@@ -375,23 +436,45 @@ export function TerritoryHistoryTab({
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
-            onClick={() => setHistoryView('timeline')}
+            onClick={() => setHistoryView('confirmed')}
             className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
-              historyView === 'timeline'
+              historyView === 'confirmed'
                 ? 'bg-indigo text-white shadow-xs'
                 : 'text-muted hover:bg-[#F8FAFC] hover:text-ink'
             }`}
           >
-            <History size={14} />
-            Linha do tempo
+            <CheckCircle2 size={14} />
+            Confirmados (Campo)
             <span
               className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                historyView === 'timeline'
+                historyView === 'confirmed'
                   ? 'bg-white/20 text-white'
                   : 'bg-[#F1F5F9] text-ink'
               }`}
             >
-              {filteredRows.length}
+              {confirmedRows.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setHistoryView('assignments')}
+            className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
+              historyView === 'assignments'
+                ? 'bg-indigo text-white shadow-xs'
+                : 'text-muted hover:bg-[#F8FAFC] hover:text-ink'
+            }`}
+          >
+            <CalendarDays size={14} />
+            Designações
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                historyView === 'assignments'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-[#F1F5F9] text-ink'
+              }`}
+            >
+              {assignmentRows.length}
             </span>
           </button>
 
@@ -439,15 +522,15 @@ export function TerritoryHistoryTab({
         </div>
       ) : null}
 
-      {historyView === 'timeline' ? (
+      {historyView !== 'feedback' ? (
         <>
           {/* Filters Card */}
       <div className="rounded-2xl border border-line bg-white p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
           <div>
             <span className="text-xs font-semibold text-ink">
-              Filtros de consulta ({filteredRows.length}{' '}
-              {filteredRows.length === 1 ? 'registro' : 'registros'})
+              Filtros de consulta ({visibleRows.length}{' '}
+              {visibleRows.length === 1 ? 'registro' : 'registros'})
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -466,12 +549,21 @@ export function TerritoryHistoryTab({
             ) : null}
             <button
               type="button"
-              disabled={filteredRows.length === 0}
+              disabled={visibleRows.length === 0}
               onClick={handleExportCsv}
               className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-line bg-white px-3.5 text-xs font-semibold text-ink transition hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Download size={14} />
               Exportar CSV
+            </button>
+            <button
+              type="button"
+              disabled={visibleRows.length === 0}
+              onClick={handleExportTxt}
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-line bg-white px-3.5 text-xs font-semibold text-ink transition hover:bg-[#F8FAFC] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <FileText size={14} />
+              Exportar TXT
             </button>
             <button
               type="button"
@@ -616,14 +708,18 @@ export function TerritoryHistoryTab({
 
       {/* History Table */}
       <div className="overflow-hidden rounded-2xl border border-line bg-white">
-        {filteredRows.length === 0 ? (
+        {visibleRows.length === 0 ? (
           <div className="p-10 text-center">
             <History size={32} className="mx-auto mb-2 text-muted" />
             <p className="text-base font-semibold text-ink">
-              Nenhuma designação encontrada no período
+              {historyView === 'confirmed'
+                ? 'Nenhum trabalho confirmado no período'
+                : 'Nenhuma designação encontrada no período'}
             </p>
             <p className="mt-1 text-sm text-muted">
-              Ajuste os filtros acima ou salve designações na aba "Designações".
+              {historyView === 'confirmed'
+                ? 'Confirme o retorno do dirigente na aba "Retorno do dirigente" ou importe o histórico.'
+                : 'Ajuste os filtros acima ou salve designações na aba "Designações".'}
             </p>
           </div>
         ) : (
@@ -633,15 +729,46 @@ export function TerritoryHistoryTab({
                 <tr className="border-b border-line bg-[#F8FAFC] text-xs font-semibold text-muted">
                   <th className="px-5 py-3">Data</th>
                   <th className="px-3 py-3">Dia</th>
-                  <th className="px-3 py-3">Local da saída</th>
+                  <th className="px-3 py-3">
+                    {historyView === 'confirmed' ? 'Região / Local' : 'Local da saída'}
+                  </th>
                   <th className="px-3 py-3">Dirigente(s)</th>
-                  <th className="px-3 py-3">Territórios</th>
+                  <th className="px-3 py-3">
+                    {historyView === 'confirmed' ? 'Territórios feitos' : 'Territórios designados'}
+                  </th>
                   <th className="px-5 py-3 text-right">Detalhes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {filteredRows.map((row) => {
+                {visibleRows.map((row) => {
                   const dayKey = weekdayKeyFromIso(row.isoDate)
+                  const ws = row.kind === 'workSession' ? workSessionsById.get(row.id) : undefined
+                  const assignment =
+                    row.kind === 'assignment' ? assignmentsById.get(row.id) : undefined
+                  const resolvedSegmentCodes: string[] = []
+                  if (ws && ws.segmentsWorked.length > 0) {
+                    for (const sid of ws.segmentsWorked) {
+                      const desc = segmentsById.get(sid)?.description
+                      if (desc && !resolvedSegmentCodes.includes(desc)) {
+                        resolvedSegmentCodes.push(desc)
+                      }
+                    }
+                  } else if (assignment) {
+                    for (const snap of assignment.territorySnapshots) {
+                      if (snap.assignedSegmentCodes && snap.assignedSegmentCodes.length > 0) {
+                        for (const desc of snap.assignedSegmentCodes) {
+                          if (desc && !resolvedSegmentCodes.includes(desc)) {
+                            resolvedSegmentCodes.push(desc)
+                          }
+                        }
+                      }
+                    }
+                  }
+                  const territoryBadgeText =
+                    resolvedSegmentCodes.length > 0
+                      ? resolvedSegmentCodes.join(', ')
+                      : row.territoryCodeRaw?.trim() || row.territoryCodes.join(', ')
+
                   return (
                     <tr
                       key={row.id}
@@ -670,7 +797,7 @@ export function TerritoryHistoryTab({
                       <td className="px-3 py-3.5">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="inline-flex items-center rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-2.5 py-0.5 text-xs font-semibold text-[#4338CA]">
-                            {row.territoryCodes.join(', ')}
+                            {territoryBadgeText}
                           </span>
                           {row.kind === 'workSession' ? (
                             row.completionState === 'partial' ? (
@@ -777,190 +904,329 @@ export function TerritoryHistoryTab({
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {visibleFeedbackAssignments.map(({ assignment }) => (
-                <div
-                  key={assignment.id}
-                  className="rounded-2xl border border-line bg-white p-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-bold text-ink">
-                        {formatFullDateBr(assignment.isoDate)}
-                      </span>
-                      <DeparturePeriodBadge periodType={assignment.periodType} />
-                      <span className="rounded-full border border-line bg-[#F8FAFC] px-2.5 py-0.5 text-xs font-medium text-ink">
-                        {assignment.locationName} • {assignment.startTime}
-                      </span>
-                      {assignment.groupName ? (
-                        <span className="rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-2.5 py-0.5 text-xs font-semibold text-[#4338CA]">
-                          {assignment.groupName}
+            <div className="space-y-4">
+              {visibleFeedbackAssignments.map(({ assignment }) => {
+                const territoryCount = assignment.territoryIds.length
+                let confirmableCount = 0
+                let skippedCount = 0
+                for (const tid of assignment.territoryIds) {
+                  const key = feedbackKey(assignment.id, tid)
+                  const existingSession = workSessionByDateTerritory.get(
+                    `${assignment.isoDate}::${tid}`,
+                  )
+                  const defaultOutcome =
+                    existingSession?.completionState === 'partial'
+                      ? 'partial'
+                      : 'completed'
+                  const outcome = execOutcomeByKey[key] ?? defaultOutcome
+                  if (outcome === 'skipped') skippedCount += 1
+                  else confirmableCount += 1
+                }
+
+                return (
+                  <div
+                    key={assignment.id}
+                    className="rounded-2xl border border-line bg-white p-5"
+                  >
+                    {/* Departure Header */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-bold text-ink">
+                          {formatFullDateBr(assignment.isoDate)}
                         </span>
-                      ) : null}
+                        <span className="text-xs font-medium text-muted">
+                          ({weekdayLabelLong(weekdayKeyFromIso(assignment.isoDate))})
+                        </span>
+                        <DeparturePeriodBadge periodType={assignment.periodType} />
+                        <span className="rounded-full border border-line bg-[#F8FAFC] px-2.5 py-0.5 text-xs font-medium text-ink">
+                          {assignment.locationName} • {assignment.startTime}
+                        </span>
+                        {assignment.groupName ? (
+                          <span className="rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-2.5 py-0.5 text-xs font-semibold text-[#4338CA]">
+                            {assignment.groupName}
+                          </span>
+                        ) : null}
+                      </div>
+                      <span className="text-xs font-medium text-muted">
+                        Dirigentes:{' '}
+                        <strong className="text-ink">
+                          {assignment.conductorNames.length > 0
+                            ? assignment.conductorNames.join(', ')
+                            : 'Não definido'}
+                        </strong>
+                      </span>
                     </div>
-                    <span className="text-xs font-medium text-muted">
-                      Dirigentes:{' '}
-                      <strong className="text-ink">
-                        {assignment.conductorNames.length > 0
-                          ? assignment.conductorNames.join(', ')
-                          : 'Não definido'}
-                      </strong>
-                    </span>
-                  </div>
 
-                  <div className="mt-3 space-y-3">
-                    {assignment.territoryIds.map((tid) => {
-                      const t = territoriesById.get(tid)
-                      if (!t) return null
-                      const key = feedbackKey(assignment.id, t.id)
-                      const terrSegments = segments.filter((s) => s.territoryId === t.id)
-                      const existingSession = workSessionByDateTerritory.get(
-                        `${assignment.isoDate}::${t.id}`,
-                      )
+                    {/* Territories Grid */}
+                    <div
+                      className={`mt-4 grid gap-3 ${
+                        territoryCount > 1 ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'
+                      }`}
+                    >
+                      {assignment.territoryIds.map((tid) => {
+                        const t = territoriesById.get(tid)
+                        if (!t) return null
+                        const key = feedbackKey(assignment.id, t.id)
+                        const terrSegments = segments.filter((s) => s.territoryId === t.id)
+                        const existingSession = workSessionByDateTerritory.get(
+                          `${assignment.isoDate}::${t.id}`,
+                        )
 
-                      const defaultIds = existingSession
-                        ? existingSession.segmentsWorked
-                        : assignment.assignedSegmentsByTerritory?.[t.id] &&
-                            assignment.assignedSegmentsByTerritory[t.id].length > 0
-                          ? assignment.assignedSegmentsByTerritory[t.id]
-                          : terrSegments.map((s) => s.id)
+                        const assignedIds = getAssignedSegmentIds(assignment, t.id)
+                        const assignedLabels = assignedIds
+                          .map((id) => segmentsById.get(id)?.description ?? id)
+                          .filter(Boolean)
 
-                      const doneIds = execDoneByKey[key] ?? defaultIds
-                      const doneSet = new Set(doneIds)
-                      const isPartial =
-                        execPartialByKey[key] ??
-                        existingSession?.completionState === 'partial'
-                      const comment =
-                        execCommentByKey[key] ?? existingSession?.notes ?? ''
+                        const defaultOutcome: 'completed' | 'partial' | 'skipped' =
+                          existingSession?.completionState === 'partial'
+                            ? 'partial'
+                            : 'completed'
+                        const outcome = execOutcomeByKey[key] ?? defaultOutcome
 
-                      return (
-                        <div
-                          key={t.id}
-                          className="rounded-xl border border-line bg-[#F8FAFC] p-3"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="inline-flex items-center gap-1 rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-2.5 py-0.5 text-xs font-bold text-[#4338CA]">
-                                {t.code}
-                                <span className="font-normal text-[#6366F1]">
-                                  ({t.regionName})
-                                </span>
+                        const defaultDoneIds = existingSession
+                          ? existingSession.segmentsWorked
+                          : assignedIds
+                        const doneIds = execDoneByKey[key] ?? defaultDoneIds
+                        const doneSet = new Set(doneIds)
+
+                        const isHalfFlag =
+                          execPartialByKey[key] ??
+                          existingSession?.completionState === 'partial'
+                        const comment =
+                          execCommentByKey[key] ?? existingSession?.notes ?? ''
+
+                        return (
+                          <div
+                            key={t.id}
+                            className={`rounded-xl border p-4 transition ${
+                              outcome === 'skipped'
+                                ? 'border-line bg-[#F8FAFC]/60 opacity-75'
+                                : outcome === 'partial'
+                                  ? 'border-[#FDE68A] bg-[#FFFBEB]/40'
+                                  : 'border-[#BBF7D0] bg-[#F0FDF4]/35'
+                            }`}
+                          >
+                            {/* Territory Top Row */}
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-sm font-bold text-ink">
+                                    Território {t.code}
+                                  </span>
+                                  <span className="text-xs text-muted">
+                                    {t.regionName}
+                                  </span>
+                                  {existingSession ? (
+                                    <span
+                                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                        existingSession.completionState === 'partial'
+                                          ? 'bg-[#FEF3C7] text-[#92400E]'
+                                          : 'bg-[#DCFCE7] text-[#166534]'
+                                      }`}
+                                    >
+                                      {existingSession.completionState === 'partial'
+                                        ? 'Já registrado (Parcial)'
+                                        : 'Já registrado'}
+                                    </span>
+                                  ) : (
+                                    <span className="rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold text-[#92400E]">
+                                      Pendente
+                                    </span>
+                                  )}
+                                </div>
+                                {assignedLabels.length > 0 ? (
+                                  <p className="mt-0.5 text-[11px] text-muted">
+                                    Designado para esta saída:{' '}
+                                    <strong className="text-ink">
+                                      {assignedLabels.join(', ')}
+                                    </strong>
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            {/* 3-Option Outcome Selector */}
+                            <div className="mt-3">
+                              <span className="mb-1.5 block text-[11px] font-semibold text-muted">
+                                Como foi o trabalho neste território?
                               </span>
-
-                              {existingSession ? (
-                                <span
-                                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                                    existingSession.completionState === 'partial'
-                                      ? 'bg-[#FEF3C7] text-[#92400E]'
-                                      : 'bg-[#DCFCE7] text-[#166534]'
+                              <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-line bg-white p-1">
+                                <button
+                                  type="button"
+                                  disabled={!canManage}
+                                  onClick={() =>
+                                    setExecOutcomeByKey((prev) => ({
+                                      ...prev,
+                                      [key]: 'completed',
+                                    }))
+                                  }
+                                  className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition ${
+                                    outcome === 'completed'
+                                      ? 'bg-[#16A34A] text-white shadow-2xs'
+                                      : 'text-muted hover:bg-[#F8FAFC] hover:text-ink'
                                   }`}
                                 >
-                                  {existingSession.completionState === 'partial'
-                                    ? 'Registrado (Parcial)'
-                                    : 'Registrado (Concluído)'}
-                                </span>
-                              ) : (
-                                <span className="rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold text-[#92400E]">
-                                  Aguardando retorno
-                                </span>
-                              )}
+                                  Concluído
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={!canManage}
+                                  onClick={() =>
+                                    setExecOutcomeByKey((prev) => ({
+                                      ...prev,
+                                      [key]: 'partial',
+                                    }))
+                                  }
+                                  className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition ${
+                                    outcome === 'partial'
+                                      ? 'bg-[#D97706] text-white shadow-2xs'
+                                      : 'text-muted hover:bg-[#F8FAFC] hover:text-ink'
+                                  }`}
+                                >
+                                  Parcial
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={!canManage}
+                                  onClick={() =>
+                                    setExecOutcomeByKey((prev) => ({
+                                      ...prev,
+                                      [key]: 'skipped',
+                                    }))
+                                  }
+                                  className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition ${
+                                    outcome === 'skipped'
+                                      ? 'bg-[#64748B] text-white shadow-2xs'
+                                      : 'text-muted hover:bg-[#F8FAFC] hover:text-ink'
+                                  }`}
+                                >
+                                  Não feito
+                                </button>
+                              </div>
                             </div>
 
-                            <label className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-[#1E40AF]">
-                              <input
-                                type="checkbox"
-                                disabled={!canManage}
-                                checked={isPartial}
-                                onChange={(e) =>
-                                  setExecPartialByKey((prev) => ({
-                                    ...prev,
-                                    [key]: e.target.checked,
-                                  }))
-                                }
-                                className="h-3.5 w-3.5 accent-indigo"
-                              />
-                              Feito pela metade / parcial
-                            </label>
-                          </div>
+                            {/* Segment selector shown when Parcial is selected */}
+                            {outcome === 'partial' ? (
+                              <div className="mt-3 space-y-2.5 rounded-xl border border-[#FDE68A] bg-white p-3">
+                                {terrSegments.length > 0 ? (
+                                  <div>
+                                    <span className="mb-1.5 block text-[11px] font-semibold text-ink">
+                                      Marque os segmentos que foram feitos:
+                                    </span>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {terrSegments.map((seg) => {
+                                        const isDone =
+                                          doneSet.has(seg.id) ||
+                                          doneSet.has(seg.description)
+                                        return (
+                                          <button
+                                            key={seg.id}
+                                            type="button"
+                                            disabled={!canManage}
+                                            onClick={() => {
+                                              setExecDoneByKey((prev) => {
+                                                const base = prev[key] ?? defaultDoneIds
+                                                return {
+                                                  ...prev,
+                                                  [key]: isDone
+                                                    ? base.filter(
+                                                        (id) =>
+                                                          id !== seg.id &&
+                                                          id !== seg.description,
+                                                      )
+                                                    : [...new Set([...base, seg.id])],
+                                                }
+                                              })
+                                            }}
+                                            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
+                                              isDone
+                                                ? 'border-[#16A34A] bg-[#DCFCE7] text-[#166534]'
+                                                : 'border-line bg-[#F8FAFC] text-muted hover:border-[#CBD5E1]'
+                                            }`}
+                                          >
+                                            {isDone ? <Check size={12} /> : null}
+                                            {seg.description}
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                ) : null}
 
-                          {terrSegments.length > 0 ? (
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {terrSegments.map((seg) => {
-                                const isDone =
-                                  doneSet.has(seg.id) || doneSet.has(seg.description)
-                                return (
-                                  <label
-                                    key={seg.id}
-                                    className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
-                                      isDone
-                                        ? 'border-[#86EFAC] bg-[#DCFCE7] text-[#166534]'
-                                        : 'border-line bg-white text-muted'
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      disabled={!canManage}
-                                      checked={isDone}
-                                      onChange={(e) => {
-                                        const checked = e.target.checked
-                                        setExecDoneByKey((prev) => {
-                                          const base = prev[key] ?? defaultIds
-                                          return {
-                                            ...prev,
-                                            [key]: checked
-                                              ? [...new Set([...base, seg.id])]
-                                              : base.filter(
-                                                  (id) =>
-                                                    id !== seg.id && id !== seg.description,
-                                                ),
-                                          }
-                                        })
-                                      }}
-                                      className="h-3.5 w-3.5 accent-[#16A34A]"
-                                    />
-                                    <span>{seg.description}</span>
-                                  </label>
-                                )
-                              })}
-                            </div>
-                          ) : null}
-
-                          <div className="mt-2.5 flex flex-col gap-2 sm:flex-row">
-                            <input
-                              type="text"
-                              disabled={!canManage}
-                              value={comment}
-                              onChange={(e) =>
-                                setExecCommentByKey((prev) => ({
-                                  ...prev,
-                                  [key]: e.target.value,
-                                }))
-                              }
-                              placeholder={`Comentário (ex.: fizemos ${t.code}A e ${t.code}B; ${t.code}B ficou pela metade)`}
-                              className="h-8 flex-1 rounded-lg border border-line bg-white px-2.5 text-xs text-ink outline-none focus:border-indigo disabled:bg-[#F1F5F9]"
-                            />
-                            {canManage ? (
-                              <button
-                                type="button"
-                                disabled={savingExecKey === key}
-                                onClick={() => void handleConfirmFeedback(assignment, t)}
-                                className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg bg-[#16A34A] px-3 text-xs font-semibold text-white hover:bg-[#15803D] disabled:opacity-50"
-                              >
-                                <Check size={13} />
-                                {savingExecKey === key
-                                  ? 'Salvando...'
-                                  : existingSession
-                                    ? 'Atualizar retorno'
-                                    : 'Confirmar feito'}
-                              </button>
+                                <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-[#92400E]">
+                                  <input
+                                    type="checkbox"
+                                    disabled={!canManage}
+                                    checked={isHalfFlag}
+                                    onChange={(e) =>
+                                      setExecPartialByKey((prev) => ({
+                                        ...prev,
+                                        [key]: e.target.checked,
+                                      }))
+                                    }
+                                    className="h-3.5 w-3.5 accent-[#D97706]"
+                                  />
+                                  Ficou pela metade / incompleto
+                                </label>
+                              </div>
                             ) : null}
+
+                            {/* Optional comment */}
+                            {outcome !== 'skipped' ? (
+                              <div className="mt-3">
+                                <input
+                                  type="text"
+                                  disabled={!canManage}
+                                  value={comment}
+                                  onChange={(e) =>
+                                    setExecCommentByKey((prev) => ({
+                                      ...prev,
+                                      [key]: e.target.value,
+                                    }))
+                                  }
+                                  placeholder="Observação opcional (ex.: paramos na metade da rua X)"
+                                  className="h-9 w-full rounded-lg border border-line bg-white px-3 text-xs text-ink outline-none focus:border-indigo disabled:bg-[#F1F5F9]"
+                                />
+                              </div>
+                            ) : (
+                              <p className="mt-3 text-[11px] text-muted">
+                                Este território não será registrado como trabalhado nesta saída.
+                              </p>
+                            )}
                           </div>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
+
+                    {/* Single Footer Action for the whole departure */}
+                    {canManage ? (
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3.5">
+                        <span className="text-xs text-muted">
+                          {confirmableCount > 0
+                            ? `${confirmableCount} território(s) serão confirmados${
+                                skippedCount > 0 ? ` • ${skippedCount} marcado(s) como não feito` : ''
+                              }`
+                            : 'Nenhum território marcado para confirmar nesta saída.'}
+                        </span>
+
+                        <button
+                          type="button"
+                          disabled={
+                            savingAssignmentId === assignment.id || confirmableCount === 0
+                          }
+                          onClick={() => void handleConfirmDepartureFeedback(assignment)}
+                          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#16A34A] px-5 text-xs font-semibold text-white shadow-xs transition hover:bg-[#15803D] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Check size={15} />
+                          {savingAssignmentId === assignment.id
+                            ? 'Confirmando retorno...'
+                            : 'Confirmar retorno da saída'}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

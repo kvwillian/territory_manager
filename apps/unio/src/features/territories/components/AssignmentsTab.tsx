@@ -715,8 +715,11 @@ export function AssignmentsTab({
       excludeAssignmentId: currentSavedAssignmentId,
     })
 
-    const scopeIds =
-      allowedTerritoryIds && allowedTerritoryIds.length > 0
+    const scopeIds = isLocked
+      ? selectedTerritoryIds.length > 0
+        ? new Set(selectedTerritoryIds)
+        : null
+      : allowedTerritoryIds && allowedTerritoryIds.length > 0
         ? new Set(allowedTerritoryIds)
         : selectedTerritoryIds.length > 0
           ? new Set(selectedTerritoryIds)
@@ -737,6 +740,7 @@ export function AssignmentsTab({
     workSessions,
     territoriesById,
     currentSavedAssignmentId,
+    isLocked,
     allowedTerritoryIds,
     selectedTerritoryIds,
   ])
@@ -1284,17 +1288,19 @@ export function AssignmentsTab({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <CalendarDays size={18} className="text-indigo" />
-                <h3 className="text-base font-semibold text-ink">Planejar saída</h3>
+                <h3 className="text-base font-semibold text-ink">
+                  {isLocked ? 'Saída designada' : 'Planejar saída'}
+                </h3>
                 {isFinalized ? (
                   <span
                     className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
                       isCompletedInField
                         ? 'border-[#86EFAC] bg-[#DCFCE7] text-[#166534]'
-                        : 'border-[#C7D2FE] bg-[#EEF2FF] text-[#4338CA]'
+                        : 'border-[#86EFAC] bg-[#ECFDF5] text-[#166534]'
                     }`}
                   >
-                    <Lock size={11} />
-                    {isCompletedInField ? 'Concluído no campo' : 'Finalizado'}
+                    <CheckCircle2 size={11} />
+                    {isCompletedInField ? 'Concluído no campo' : 'Designado e salvo'}
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 rounded-full border border-[#FDE68A] bg-[#FFFBEB] px-2.5 py-0.5 text-[11px] font-semibold text-[#92400E]">
@@ -1383,7 +1389,7 @@ export function AssignmentsTab({
               <p className="text-sm font-medium text-[#475569]">{fullHeadingDate}</p>
 
               <div className="flex items-center gap-1.5">
-                {canManage ? (
+                {canEditForm ? (
                   <button
                     type="button"
                     title="Clique para alternar o tipo da saída (Manhã / Tarde / Domingo)"
@@ -1411,6 +1417,129 @@ export function AssignmentsTab({
               </div>
             </div>
 
+            {isLocked ? (
+              <div className="mt-4 space-y-3.5">
+                <div className="flex items-center gap-2 rounded-xl border border-[#BBF7D0] bg-[#ECFDF5] px-3.5 py-2.5 text-xs font-semibold text-[#166534]">
+                  <CheckCircle2 size={15} className="shrink-0" />
+                  <span>
+                    {isCompletedInField
+                      ? 'Esta saída já foi designada e concluída no campo.'
+                      : 'Saída designada e salva. Os dados abaixo estão fixados.'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-12">
+                  <div className="rounded-xl border border-line bg-[#F8FAFC] px-3.5 py-2.5 sm:col-span-8">
+                    <span className="block text-[11px] font-medium text-muted">
+                      Local da saída
+                    </span>
+                    <span className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold text-ink">
+                      <Home size={14} className="shrink-0 text-indigo" />
+                      {locationName || 'Não informado'}
+                    </span>
+                  </div>
+
+                  <div className="rounded-xl border border-line bg-[#F8FAFC] px-3.5 py-2.5 sm:col-span-4">
+                    <span className="block text-[11px] font-medium text-muted">
+                      Horário
+                    </span>
+                    <span className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold text-ink">
+                      <Clock size={14} className="shrink-0 text-indigo" />
+                      {startTime}
+                    </span>
+                  </div>
+                </div>
+
+                {periodType === 'sunday' && groupName ? (
+                  <div className="rounded-xl border border-line bg-[#F8FAFC] px-3.5 py-2.5">
+                    <span className="block text-[11px] font-medium text-muted">
+                      Grupo de domingo
+                    </span>
+                    <span className="mt-0.5 block text-sm font-semibold text-ink">
+                      {groupName}
+                    </span>
+                  </div>
+                ) : null}
+
+                <div className="rounded-xl border border-line bg-[#F8FAFC] px-3.5 py-2.5">
+                  <span className="block text-[11px] font-medium text-muted">
+                    Dirigentes
+                  </span>
+                  {conductorNames.length > 0 ? (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {conductorNames.map((name) => (
+                        <span
+                          key={name}
+                          className="inline-flex items-center rounded-full border border-[#C7D2FE] bg-white px-2.5 py-0.5 text-xs font-semibold text-ink"
+                        >
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="mt-0.5 block text-xs text-muted">
+                      Nenhum dirigente definido
+                    </span>
+                  )}
+                </div>
+
+                <div className="border-t border-line pt-3">
+                  <span className="block text-xs font-medium text-muted">
+                    Territórios designados ({selectedTerritoryObjects.length})
+                  </span>
+                  <div className="mt-2 space-y-2">
+                    {selectedTerritoryObjects.map((t) => {
+                      const effSegs = effectiveSegmentsByTerritoryId.get(t.id) ?? []
+                      const chosenSegs = resolveChosenSegmentsForTerritory(
+                        t.id,
+                        assignedSegmentsByTerritory[t.id],
+                      )
+                      const isSubsetChosen =
+                        effSegs.length > 0 &&
+                        chosenSegs.length > 0 &&
+                        chosenSegs.length < effSegs.length
+                      return (
+                        <div
+                          key={t.id}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#C7D2FE] bg-[#F8FAFC] px-3 py-2.5"
+                        >
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-2.5 py-0.5 text-xs font-bold text-[#4338CA]">
+                              {t.code}
+                              <span className="font-normal text-[#6366F1]">
+                                ({t.regionName})
+                              </span>
+                            </span>
+                            {isSubsetChosen ? (
+                              <span className="rounded-full border border-[#93C5FD] bg-[#DBEAFE] px-2 py-0.5 text-[10px] font-bold text-[#1E40AF]">
+                                Segmentos: {chosenSegs.map((s) => s.code).join(', ')}
+                              </span>
+                            ) : effSegs.length > 0 ? (
+                              <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-muted">
+                                {effSegs.map((s) => s.code).join(', ')}
+                              </span>
+                            ) : null}
+                          </div>
+
+                          {t.imageUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewMapTerritory(t)}
+                              title={`Ver mapa de ${t.code}`}
+                              className="inline-flex items-center gap-1 rounded-lg border border-line bg-white px-2 py-1 text-[11px] font-medium text-indigo hover:bg-[#EEF2FF]"
+                            >
+                              <ImageIcon size={12} />
+                              Mapa
+                            </button>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
             {/* Location & Time */}
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-12">
               <div className="sm:col-span-8">
@@ -1829,11 +1958,15 @@ export function AssignmentsTab({
                 </div>
               )}
             </div>
+              </>
+            )}
           </div>
         </div>
 
-        {/* CENTER COLUMN (4 cols): Territórios disponíveis (com sugestão embutida) + Histórico */}
+        {/* CENTER COLUMN (4 cols): Territórios disponíveis (quando planejando) + Histórico */}
         <div className="space-y-4 xl:col-span-4">
+          {!isLocked ? (
+          <>
           {/* Card: Territórios disponíveis neste local */}
           <div className="rounded-2xl border border-line bg-white p-5">
             <div className="mb-3 flex items-center justify-between gap-2">
@@ -2190,15 +2323,19 @@ export function AssignmentsTab({
               </div>
             )}
           </div>
+          </>
+          ) : null}
 
-          {/* Card: Histórico dos territórios deste local */}
+          {/* Card: Histórico dos territórios */}
           <div className="rounded-2xl border border-line bg-white p-5">
             <div className="mb-3.5 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <History size={18} className="text-indigo" />
                 <div>
                   <h3 className="text-base font-semibold text-ink">
-                    Histórico dos territórios deste local
+                    {isLocked
+                      ? 'Histórico dos territórios escolhidos'
+                      : 'Histórico dos territórios deste local'}
                   </h3>
                   <p className="text-[11px] text-muted">
                     Inclui trabalhos feitos em outras saídas

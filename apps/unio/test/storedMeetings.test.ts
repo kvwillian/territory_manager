@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { mergeMeetings, meetingFromDocument } from '../src/features/meetings/storedMeetings.ts'
-import { alignIsoToWeekday, alignMeeting, congregationProfile, weekendDateFor, withWeekendMeetings, type CongregationMeeting } from '../src/domain/index.ts'
+import { formatPosterWeekRange, renderMeetingPosterPdf } from '../src/features/meetings/posterPdf.ts'
+import { alignIsoToWeekday, alignMeeting, congregationProfile, midweekTemplate, weekendDateFor, withWeekendMeetings, type CongregationMeeting } from '../src/domain/index.ts'
 
 const local: CongregationMeeting = {
   id: 'midweek-2026-10-14',
@@ -73,4 +74,22 @@ test('creates the Sunday meeting for each Thursday meeting', () => {
   const weekend = meetings.find((meeting) => meeting.kind === 'weekend')
   assert.equal(weekend?.isoDate, '2026-10-18')
   assert.equal(weekend?.sections[0]?.parts.some((part) => part.title === 'Discurso público'), true)
+})
+
+test('renders midweek meeting poster PDF in the Nossa Vida e Ministério Cristão layout', async () => {
+  assert.equal(formatPosterWeekRange('2026-11-19'), '16 - 22  Novembro')
+  const sample = midweekTemplate('2026-11-19', 'published')
+  sample.duties[0].people = ['Edilson Gusmão']
+  sample.duties[1].people = ['João Vittor']
+  sample.sections[0].parts[0].roles[0].personName = 'José Ferreira'
+  sample.sections[1].parts[0].roles[0].personName = 'Nicoly Rafaely'
+  sample.sections[1].parts[0].roles[1].personName = 'Fátima Moraes'
+  sample.sections[2].parts[1].roles[0].personName = 'Roberto Silva'
+  sample.sections[2].parts[1].roles[1].personName = 'João Aristeu'
+
+  const { bytes, filename } = await renderMeetingPosterPdf(sample)
+  assert.equal(filename, 'reuniao_2026-11-19_novembro.pdf')
+  assert.ok(bytes.length > 2000)
+  const header = new TextDecoder().decode(bytes.slice(0, 5))
+  assert.equal(header, '%PDF-')
 })

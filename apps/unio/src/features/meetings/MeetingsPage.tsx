@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Download,
   Flag,
   Gem,
   Leaf,
@@ -15,6 +16,7 @@ import {
   Tv,
   UserRound,
   Users,
+  X,
 } from 'lucide-react'
 import {
   dayLine,
@@ -39,6 +41,7 @@ import { usePublisherCatalog } from '../publishers/catalog'
 import { assignmentEmptyMessage, candidatesForMeetingLabel } from '../publishers/assignments'
 import { PublisherSelect } from '../publishers/PublisherSelect'
 import { ImportFlow } from './ImportFlow'
+import { exportMeetingPosterPdf } from './posterPdf'
 
 const sectionMeta: Record<
   SectionToken,
@@ -219,6 +222,16 @@ export function MeetingsPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                {meeting.kind === 'midweek' ? (
+                  <button
+                    type="button"
+                    onClick={() => void exportMeetingPosterPdf(meeting)}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-line bg-white px-3 text-sm font-medium text-ink hover:bg-[#F8FAFC]"
+                  >
+                    <Download size={15} />
+                    Exportar PDF
+                  </button>
+                ) : null}
                 <Popover open={menuOpen} onClose={() => setMenuOpen(false)}>
                   <button
                     type="button"
@@ -405,18 +418,60 @@ function PartRow({ sectionId, part, number }: { sectionId: string; part: Program
       </div>
       <div className="min-w-0">
         {store.editing ? (
-          <div className="space-y-1">
-            {part.roles.map((itemRole) => (
-              <PublisherSelect
-                key={itemRole.id}
-                value={itemRole.personName}
-                publishers={candidatesForMeetingLabel(publishers, itemRole.label)}
-                emptyMessage={assignmentEmptyMessage(itemRole.label)}
-                placeholder={itemRole.showLabel ? itemRole.label : 'Publicador'}
-                label={`${itemRole.label} da parte ${number}`}
-                onCommit={(name) => store.updatePartPerson(sectionId, part.id, itemRole.id, name)}
-              />
+          <div className="space-y-1.5">
+            {part.roles.map((itemRole, roleIndex) => (
+              <div key={itemRole.id} className="flex items-center gap-1">
+                <div className="min-w-0 flex-1">
+                  <PublisherSelect
+                    value={itemRole.personName}
+                    publishers={candidatesForMeetingLabel(publishers, itemRole.label)}
+                    emptyMessage={assignmentEmptyMessage(itemRole.label)}
+                    placeholder={itemRole.showLabel ? itemRole.label : 'Publicador'}
+                    label={`${itemRole.label} da parte ${number}`}
+                    onCommit={(name) =>
+                      store.updatePartPerson(sectionId, part.id, itemRole.id, name)
+                    }
+                  />
+                </div>
+                {part.roles.length > 1 && roleIndex > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      store.updatePart(sectionId, part.id, {
+                        roles: part.roles.filter((r) => r.id !== itemRole.id),
+                      })
+                    }
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted hover:bg-[#FEE2E2] hover:text-[#DC2626]"
+                    aria-label="Remover segunda pessoa"
+                    title="Remover pessoa"
+                  >
+                    <X size={14} />
+                  </button>
+                ) : null}
+              </div>
             ))}
+            {part.roles.length < 2 && !part.structural ? (
+              <button
+                type="button"
+                onClick={() =>
+                  store.updatePart(sectionId, part.id, {
+                    roles: [
+                      ...part.roles,
+                      {
+                        id: `${part.id}-role-${part.roles.length + 1}-${Date.now()}`,
+                        label: part.roles[0]?.label || 'Participante',
+                        showLabel: false,
+                        personName: '',
+                      },
+                    ],
+                  })
+                }
+                className="inline-flex items-center gap-1 text-xs font-medium text-indigo hover:underline"
+              >
+                <Plus size={12} />
+                Adicionar pessoa
+              </button>
+            ) : null}
           </div>
         ) : part.roles.some((itemRole) => itemRole.showLabel) ? (
           <div className="text-sm text-muted">
