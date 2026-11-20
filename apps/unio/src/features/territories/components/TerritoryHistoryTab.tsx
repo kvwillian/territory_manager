@@ -1023,7 +1023,6 @@ export function TerritoryHistoryTab({
           ) : (
             <div className="space-y-4">
               {visibleFeedbackAssignments.map(({ assignment }) => {
-                const territoryCount = assignment.territoryIds.length
                 let confirmableCount = 0
                 let skippedCount = 0
                 for (const tid of assignment.territoryIds) {
@@ -1076,12 +1075,8 @@ export function TerritoryHistoryTab({
                       </span>
                     </div>
 
-                    {/* Territories Grid */}
-                    <div
-                      className={`mt-4 grid gap-3 ${
-                        territoryCount > 1 ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'
-                      }`}
-                    >
+                    {/* Territories List */}
+                    <div className="mt-4 space-y-3">
                       {assignment.territoryIds.map((tid) => {
                         const t = territoriesById.get(tid)
                         if (!t) return null
@@ -1127,14 +1122,14 @@ export function TerritoryHistoryTab({
                                   : 'border-[#BBF7D0] bg-[#F0FDF4]/35'
                             }`}
                           >
-                            {/* Territory Top Row */}
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div>
+                            {/* Territory Header + Compact Outcome Segmented Control */}
+                            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                              <div className="min-w-0 space-y-1.5">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <span className="text-sm font-bold text-ink">
+                                  <span className="text-base font-bold text-ink">
                                     Território {t.code}
                                   </span>
-                                  <span className="text-xs text-muted">
+                                  <span className="text-xs font-medium text-muted">
                                     {t.regionName}
                                   </span>
                                   {existingSession ? (
@@ -1155,23 +1150,26 @@ export function TerritoryHistoryTab({
                                     </span>
                                   )}
                                 </div>
+
                                 {assignedLabels.length > 0 ? (
-                                  <p className="mt-0.5 text-[11px] text-muted">
-                                    Designado para esta saída:{' '}
-                                    <strong className="text-ink">
-                                      {assignedLabels.join(', ')}
-                                    </strong>
-                                  </p>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="text-xs font-medium text-muted">
+                                      Designado:
+                                    </span>
+                                    {assignedLabels.map((lbl) => (
+                                      <span
+                                        key={lbl}
+                                        className="rounded-md border border-[#C7D2FE] bg-white px-2 py-0.5 text-xs font-semibold text-[#4338CA]"
+                                      >
+                                        {lbl}
+                                      </span>
+                                    ))}
+                                  </div>
                                 ) : null}
                               </div>
-                            </div>
 
-                            {/* 3-Option Outcome Selector */}
-                            <div className="mt-3">
-                              <span className="mb-1.5 block text-[11px] font-semibold text-muted">
-                                Como foi o trabalho neste território?
-                              </span>
-                              <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-line bg-white p-1">
+                              {/* Compact 3-Option Outcome Selector */}
+                              <div className="inline-flex shrink-0 items-center gap-1 self-start rounded-xl border border-line bg-white p-1 md:self-center">
                                 <button
                                   type="button"
                                   disabled={!canManage}
@@ -1181,7 +1179,7 @@ export function TerritoryHistoryTab({
                                       [key]: 'completed',
                                     }))
                                   }
-                                  className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition ${
+                                  className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition ${
                                     outcome === 'completed'
                                       ? 'bg-[#16A34A] text-white shadow-2xs'
                                       : 'text-muted hover:bg-[#F8FAFC] hover:text-ink'
@@ -1198,7 +1196,7 @@ export function TerritoryHistoryTab({
                                       [key]: 'partial',
                                     }))
                                   }
-                                  className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition ${
+                                  className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition ${
                                     outcome === 'partial'
                                       ? 'bg-[#D97706] text-white shadow-2xs'
                                       : 'text-muted hover:bg-[#F8FAFC] hover:text-ink'
@@ -1215,7 +1213,7 @@ export function TerritoryHistoryTab({
                                       [key]: 'skipped',
                                     }))
                                   }
-                                  className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition ${
+                                  className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition ${
                                     outcome === 'skipped'
                                       ? 'bg-[#64748B] text-white shadow-2xs'
                                       : 'text-muted hover:bg-[#F8FAFC] hover:text-ink'
