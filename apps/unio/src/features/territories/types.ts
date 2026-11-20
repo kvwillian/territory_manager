@@ -104,6 +104,8 @@ export type TerritoryAssignmentRecord = {
   territoryIds: string[]
   territorySnapshots: TerritorySnapshotItem[]
   assignedSegmentsByTerritory?: Record<string, string[]>
+  feedbackConfirmed?: boolean
+  skippedTerritoryIds?: string[]
   notes: string
   updatedAtIso: string | null
 }
@@ -123,6 +125,8 @@ export type WorkSessionRecord = {
   notes: string
   completionState?: WorkSessionCompletionState
   periodType?: DeparturePeriodType | null
+  locationName?: string
+  assignmentId?: string | null
   regionId?: string | null
   regionName?: string
   territoryCodeRaw?: string

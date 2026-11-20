@@ -69,6 +69,7 @@ function TerritoriesPageContent() {
   const activeMeta = TABS.find((t) => t.key === activeTabKey) ?? TABS[0]!
 
   const [historyLocationSeed, setHistoryLocationSeed] = useState('')
+  const [historyTerritorySeed, setHistoryTerritorySeed] = useState('')
   const [plannerTargetDate, setPlannerTargetDate] = useState<string | null>(null)
 
   return (
@@ -132,8 +133,9 @@ function TerritoriesPageContent() {
         <AssignmentsTab
           externalIsoDate={plannerTargetDate}
           onClearExternalIsoDate={() => setPlannerTargetDate(null)}
-          onNavigateToHistory={(locName) => {
+          onNavigateToHistory={(locName, territoryId) => {
             setHistoryLocationSeed(locName ?? '')
+            setHistoryTerritorySeed(territoryId ?? '')
             navigate('/territorios/historico')
           }}
         />
@@ -149,6 +151,7 @@ function TerritoriesPageContent() {
       ) : (
         <TerritoryHistoryTab
           initialLocationFilter={historyLocationSeed}
+          initialTerritoryFilter={historyTerritorySeed}
           onOpenDateInPlanner={(isoDate) => {
             setPlannerTargetDate(isoDate)
             navigate('/territorios')

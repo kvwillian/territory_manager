@@ -10,6 +10,7 @@ import {
   FileJson,
   FileText,
   History,
+  Plus,
   RotateCcw,
   Trash2,
   X,
@@ -30,7 +31,14 @@ import {
   weekdayLabelShort,
 } from '../status'
 import { useTerritories } from '../store'
-import type { TerritoryAssignmentRecord } from '../types'
+import type {
+  ConductorOption,
+  DeparturePeriodType,
+  MeetingLocationRecord,
+  TerritoryAssignmentRecord,
+  TerritoryRecord,
+  TerritorySegmentRecord,
+} from '../types'
 import { buildTerritoryWhatsappMessage } from '../whatsapp'
 import { HistoryImportModal } from './HistoryImportModal'
 import { DeparturePeriodBadge } from './SharedPieces'
@@ -39,20 +47,27 @@ type PeriodPreset = '15d' | '30d' | '60d' | '90d' | 'all' | 'custom'
 
 export function TerritoryHistoryTab({
   initialLocationFilter = '',
+  initialTerritoryFilter = '',
   onOpenDateInPlanner,
 }: {
   initialLocationFilter?: string
+  initialTerritoryFilter?: string
   onOpenDateInPlanner?: (isoDate: string) => void
 }) {
   const {
     canManage,
     regions,
+    locations,
+    conductorOptions,
     territories,
     segments,
     assignments,
     workSessions,
     resolveConductors,
     recordTerritoryExecution,
+    markAssignmentFeedback,
+    deleteAssignment,
+    deleteWorkSession,
     clearHistory,
   } = useTerritories()
 
@@ -68,6 +83,7 @@ export function TerritoryHistoryTab({
   const [execCommentByKey, setExecCommentByKey] = useState<Record<string, string>>({})
   const [savingAssignmentId, setSavingAssignmentId] = useState<string | null>(null)
   const [feedbackBannerMsg, setFeedbackBannerMsg] = useState('')
+  const [feedbackErrorMsg, setFeedbackErrorMsg] = useState('')
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('30d')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -77,6 +93,7 @@ export function TerritoryHistoryTab({
   const [territoryFilter, setTerritoryFilter] = useState('')
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
   const [importModalOpen, setImportModalOpen] = useState(false)
+  const [manualModalOpen, setManualModalOpen] = useState(false)
   const [clearModalOpen, setClearModalOpen] = useState(false)
   const [clearWorkSessionsChecked, setClearWorkSessionsChecked] = useState(true)
   const [clearAssignmentsChecked, setClearAssignmentsChecked] = useState(false)
@@ -90,6 +107,14 @@ export function TerritoryHistoryTab({
       setLocationFilter(initialLocationFilter)
     }
   }, [initialLocationFilter])
+
+  useEffect(() => {
+    if (initialTerritoryFilter) {
+      setTerritoryFilter(initialTerritoryFilter)
+      setPeriodPreset('all')
+      setHistoryView('confirmed')
+    }
+  }, [initialTerritoryFilter])
 
   const todayIso = useMemo(() => isoFromDate(new Date()), [])
 
@@ -264,6 +289,34 @@ export function TerritoryHistoryTab({
     }
   }
 
+  async function handleDeleteEntry(entry: { id: string; kind: 'assignment' | 'workSession'; isoDate: string }) {
+    const label = entry.kind === 'workSession' ? 'execução confirmada' : 'designação'
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(`Deseja excluir esta ${label} de ${formatShortDayMonth(entry.isoDate)}?`)
+    ) {
+      return
+    }
+    setFeedbackErrorMsg('')
+    try {
+      if (entry.kind === 'workSession') {
+        await deleteWorkSession(entry.id.replace(/^ws-/, ''))
+      } else {
+        await deleteAssignment(entry.id)
+      }
+      if (selectedEntryId === entry.id) {
+        setSelectedEntryId(null)
+      }
+      setFeedbackBannerMsg('Registro excluído do histórico.')
+    } catch (err) {
+      setFeedbackErrorMsg(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Não foi possível excluir o registro.',
+      )
+    }
+  }
+
   function handleExportCsv() {
     const csv = buildTerritoryHistoryCsv({
       entries: visibleRows,
@@ -309,12 +362,15 @@ export function TerritoryHistoryTab({
     return assignments
       .filter((a) => a.status === 'assigned' && a.territoryIds.length > 0)
       .map((a) => {
+        const skippedSet = new Set(a.skippedTerritoryIds ?? [])
         const pendingCount = a.territoryIds.filter(
-          (tid) => !sessionsByDateTerritory.has(`${a.isoDate}::${tid}`),
+          (tid) =>
+            !sessionsByDateTerritory.has(`${a.isoDate}::${tid}`) &&
+            !skippedSet.has(tid),
         ).length
         return {
           assignment: a,
-          hasPending: pendingCount > 0,
+          hasPending: !a.feedbackConfirmed && pendingCount > 0,
           pendingCount,
         }
       })
@@ -360,7 +416,9 @@ export function TerritoryHistoryTab({
   async function handleConfirmDepartureFeedback(assignment: TerritoryAssignmentRecord) {
     const resolved = resolveConductors(assignment.conductorNames)
     setSavingAssignmentId(assignment.id)
+    setFeedbackErrorMsg('')
     let savedCount = 0
+    const skippedIds: string[] = []
     try {
       for (const tid of assignment.territoryIds) {
         const territory = territoriesById.get(tid)
@@ -369,10 +427,17 @@ export function TerritoryHistoryTab({
         const existingSession = workSessionByDateTerritory.get(
           `${assignment.isoDate}::${territory.id}`,
         )
-        const defaultOutcome: 'completed' | 'partial' | 'skipped' =
-          existingSession?.completionState === 'partial' ? 'partial' : 'completed'
+        const wasSkipped = (assignment.skippedTerritoryIds ?? []).includes(territory.id)
+        const defaultOutcome: 'completed' | 'partial' | 'skipped' = wasSkipped
+          ? 'skipped'
+          : existingSession?.completionState === 'partial'
+            ? 'partial'
+            : 'completed'
         const outcome = execOutcomeByKey[key] ?? defaultOutcome
-        if (outcome === 'skipped') continue
+        if (outcome === 'skipped') {
+          skippedIds.push(territory.id)
+          continue
+        }
 
         const terrSegments = segments.filter((s) => s.territoryId === territory.id)
         const assignedIds = getAssignedSegmentIds(assignment, territory.id)
@@ -394,9 +459,11 @@ export function TerritoryHistoryTab({
         const completionState =
           outcome === 'partial' && (isPartialFlag || pendingIds.length > 0 || terrSegments.length === 0)
             ? 'partial'
-            : pendingIds.length > 0 && terrSegments.length > 0
+            : pendingIds.length > 0 && terrSegments.length === 0
               ? 'partial'
-              : 'completed'
+              : pendingIds.length > 0 && terrSegments.length > 0
+                ? 'partial'
+                : 'completed'
 
         const comment = (execCommentByKey[key] ?? existingSession?.notes ?? '').trim()
 
@@ -410,6 +477,9 @@ export function TerritoryHistoryTab({
           pendingSegmentIds: pendingIds,
           completionState,
           notes: comment,
+          periodType: assignment.periodType,
+          locationName: assignment.locationName,
+          assignmentId: assignment.id,
           regionId: territory.regionId,
           regionName: territory.regionName,
           territoryCodeRaw: territory.code,
@@ -417,13 +487,25 @@ export function TerritoryHistoryTab({
         savedCount += 1
       }
 
-      if (savedCount > 0) {
-        setFeedbackBannerMsg(
-          `Retorno confirmado para ${savedCount} território(s) da saída de ${formatShortDayMonth(
-            assignment.isoDate,
-          )}.`,
-        )
-      }
+      await markAssignmentFeedback(assignment.id, skippedIds)
+
+      setFeedbackBannerMsg(
+        savedCount > 0
+          ? `Retorno confirmado para a saída de ${formatShortDayMonth(
+              assignment.isoDate,
+            )} (${savedCount} trabalhado(s)${
+              skippedIds.length > 0 ? `, ${skippedIds.length} não feito(s)` : ''
+            }).`
+          : `Retorno confirmado para a saída de ${formatShortDayMonth(
+              assignment.isoDate,
+            )} (nenhum território trabalhado).`,
+      )
+    } catch (err) {
+      setFeedbackErrorMsg(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Não foi possível confirmar o retorno da saída.',
+      )
     } finally {
       setSavingAssignmentId(null)
     }
@@ -522,6 +604,15 @@ export function TerritoryHistoryTab({
         </div>
       ) : null}
 
+      {feedbackErrorMsg ? (
+        <div className="flex items-center justify-between rounded-2xl border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-xs font-semibold text-[#B91C1C]">
+          <span>{feedbackErrorMsg}</span>
+          <button type="button" onClick={() => setFeedbackErrorMsg('')}>
+            <X size={15} />
+          </button>
+        </div>
+      ) : null}
+
       {historyView !== 'feedback' ? (
         <>
           {/* Filters Card */}
@@ -568,11 +659,21 @@ export function TerritoryHistoryTab({
             <button
               type="button"
               onClick={() => setImportModalOpen(true)}
-              className="inline-flex h-9 items-center gap-2 rounded-xl bg-indigo px-4 text-xs font-semibold text-white shadow-xs transition hover:bg-indigo/90"
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-line bg-white px-3.5 text-xs font-semibold text-ink transition hover:bg-[#F8FAFC]"
             >
               <FileJson size={15} />
               Importar histórico
             </button>
+            {canManage ? (
+              <button
+                type="button"
+                onClick={() => setManualModalOpen(true)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-indigo px-4 text-xs font-semibold text-white shadow-xs transition hover:bg-indigo/90"
+              >
+                <Plus size={15} />
+                Registro manual
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -829,18 +930,34 @@ export function TerritoryHistoryTab({
                           ) : null}
                         </div>
                       </td>
-                      <td className="px-5 py-3.5 text-right">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setSelectedEntryId(row.id)
-                          }}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-[#EEF2FF] hover:text-indigo"
-                          aria-label="Ver detalhes da designação"
-                        >
-                          <Eye size={16} />
-                        </button>
+                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedEntryId(row.id)
+                            }}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-[#EEF2FF] hover:text-indigo"
+                            aria-label="Ver detalhes da designação"
+                          >
+                            <Eye size={16} />
+                          </button>
+                          {canManage ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void handleDeleteEntry(row)
+                              }}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-[#FEE2E2] hover:text-[#DC2626]"
+                              aria-label="Excluir registro"
+                              title="Excluir registro"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -914,8 +1031,10 @@ export function TerritoryHistoryTab({
                   const existingSession = workSessionByDateTerritory.get(
                     `${assignment.isoDate}::${tid}`,
                   )
-                  const defaultOutcome =
-                    existingSession?.completionState === 'partial'
+                  const wasSkipped = (assignment.skippedTerritoryIds ?? []).includes(tid)
+                  const defaultOutcome = wasSkipped
+                    ? 'skipped'
+                    : existingSession?.completionState === 'partial'
                       ? 'partial'
                       : 'completed'
                   const outcome = execOutcomeByKey[key] ?? defaultOutcome
@@ -977,8 +1096,10 @@ export function TerritoryHistoryTab({
                           .map((id) => segmentsById.get(id)?.description ?? id)
                           .filter(Boolean)
 
-                        const defaultOutcome: 'completed' | 'partial' | 'skipped' =
-                          existingSession?.completionState === 'partial'
+                        const wasSkipped = (assignment.skippedTerritoryIds ?? []).includes(t.id)
+                        const defaultOutcome: 'completed' | 'partial' | 'skipped' = wasSkipped
+                          ? 'skipped'
+                          : existingSession?.completionState === 'partial'
                             ? 'partial'
                             : 'completed'
                         const outcome = execOutcomeByKey[key] ?? defaultOutcome
@@ -1211,9 +1332,7 @@ export function TerritoryHistoryTab({
 
                         <button
                           type="button"
-                          disabled={
-                            savingAssignmentId === assignment.id || confirmableCount === 0
-                          }
+                          disabled={savingAssignmentId === assignment.id}
                           onClick={() => void handleConfirmDepartureFeedback(assignment)}
                           className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#16A34A] px-5 text-xs font-semibold text-white shadow-xs transition hover:bg-[#15803D] disabled:cursor-not-allowed disabled:opacity-50"
                         >
@@ -1240,6 +1359,7 @@ export function TerritoryHistoryTab({
           territoriesById={territoriesById}
           onClose={() => setSelectedEntryId(null)}
           onOpenDateInPlanner={onOpenDateInPlanner}
+          onDelete={canManage ? () => void handleDeleteEntry(selectedEntry) : undefined}
         />
       ) : null}
 
@@ -1248,6 +1368,44 @@ export function TerritoryHistoryTab({
         <HistoryImportModal
           onClose={() => setImportModalOpen(false)}
           onImportedSuccess={() => setPeriodPreset('all')}
+        />
+      ) : null}
+
+      {/* Manual Work Session Modal */}
+      {manualModalOpen ? (
+        <ManualWorkSessionModal
+          defaultIsoDate={todayIso}
+          locations={locations}
+          territories={territories}
+          segments={segments}
+          conductorOptions={conductorOptions}
+          onClose={() => setManualModalOpen(false)}
+          onSave={async (payload) => {
+            const resolved = resolveConductors(payload.conductorNames)
+            await recordTerritoryExecution({
+              territoryId: payload.territory.id,
+              isoDate: payload.isoDate,
+              conductorName: payload.conductorNames.join(', '),
+              conductorUserId: resolved.userIds[0] ?? null,
+              conductorPublisherId: resolved.publisherIds[0] ?? null,
+              completedSegmentIds: payload.completedSegmentIds,
+              pendingSegmentIds: payload.pendingSegmentIds,
+              completionState: payload.completionState,
+              notes: payload.notes,
+              periodType: payload.periodType,
+              locationName: payload.locationName,
+              regionId: payload.territory.regionId,
+              regionName: payload.territory.regionName,
+              territoryCodeRaw: payload.territory.code,
+            })
+            setManualModalOpen(false)
+            setHistoryView('confirmed')
+            setFeedbackBannerMsg(
+              `Registro salvo para o território ${payload.territory.code} em ${formatShortDayMonth(
+                payload.isoDate,
+              )}.`,
+            )
+          }}
         />
       ) : null}
 
@@ -1372,12 +1530,14 @@ function HistoryDetailDrawer({
   territoriesById,
   onClose,
   onOpenDateInPlanner,
+  onDelete,
 }: {
   entry: ReturnType<typeof buildTerritoryTimeline>[number]
   assignment: TerritoryAssignmentRecord | null
   territoriesById: Map<string, { code: string; regionName: string }>
   onClose: () => void
   onOpenDateInPlanner?: (isoDate: string) => void
+  onDelete?: () => void
 }) {
   const [copied, setCopied] = useState(false)
   const dayKey = weekdayKeyFromIso(entry.isoDate)
@@ -1597,12 +1757,319 @@ function HistoryDetailDrawer({
           ) : (
             <span />
           )}
+          <div className="flex items-center gap-2">
+            {onDelete ? (
+              <button
+                type="button"
+                onClick={onDelete}
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#FECACA] bg-[#FEF2F2] px-3.5 text-xs font-semibold text-[#B91C1C] hover:bg-[#FEE2E2]"
+              >
+                <Trash2 size={14} />
+                Excluir registro
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-9 rounded-xl border border-line bg-white px-4 text-xs font-semibold text-ink hover:bg-[#F8FAFC]"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ManualWorkSessionModal({
+  defaultIsoDate,
+  locations,
+  territories,
+  segments,
+  conductorOptions,
+  onClose,
+  onSave,
+}: {
+  defaultIsoDate: string
+  locations: MeetingLocationRecord[]
+  territories: TerritoryRecord[]
+  segments: TerritorySegmentRecord[]
+  conductorOptions: ConductorOption[]
+  onClose: () => void
+  onSave: (payload: {
+    isoDate: string
+    periodType: DeparturePeriodType
+    locationName: string
+    conductorNames: string[]
+    territory: TerritoryRecord
+    completedSegmentIds: string[]
+    pendingSegmentIds: string[]
+    completionState: 'completed' | 'partial'
+    notes: string
+  }) => Promise<void>
+}) {
+  const [isoDate, setIsoDate] = useState(defaultIsoDate)
+  const [periodType, setPeriodType] = useState<DeparturePeriodType>('morning')
+  const [locationName, setLocationName] = useState(locations[0]?.name ?? '')
+  const [conductorInput, setConductorInput] = useState('')
+  const [territoryId, setTerritoryId] = useState(territories[0]?.id ?? '')
+  const [completionState, setCompletionState] = useState<'completed' | 'partial'>('completed')
+  const [selectedSegIds, setSelectedSegIds] = useState<string[]>([])
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [errMsg, setErrMsg] = useState('')
+
+  const selectedTerritory = useMemo(
+    () => territories.find((t) => t.id === territoryId) ?? null,
+    [territories, territoryId],
+  )
+
+  const terrSegments = useMemo(
+    () => segments.filter((s) => s.territoryId === territoryId),
+    [segments, territoryId],
+  )
+
+  useEffect(() => {
+    setSelectedSegIds(terrSegments.map((s) => s.id))
+  }, [territoryId, terrSegments])
+
+  async function handleSubmit() {
+    if (!isoDate) {
+      setErrMsg('Informe a data.')
+      return
+    }
+    if (!selectedTerritory) {
+      setErrMsg('Selecione um território.')
+      return
+    }
+    const conductorNames = conductorInput
+      .split(/[,/]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+
+    const completedSegmentIds =
+      completionState === 'completed'
+        ? terrSegments.map((s) => s.id)
+        : selectedSegIds
+    const doneSet = new Set(completedSegmentIds)
+    const pendingSegmentIds = terrSegments
+      .filter((s) => !doneSet.has(s.id))
+      .map((s) => s.id)
+
+    setSaving(true)
+    setErrMsg('')
+    try {
+      await onSave({
+        isoDate,
+        periodType,
+        locationName: locationName.trim() || 'Saída manual',
+        conductorNames,
+        territory: selectedTerritory,
+        completedSegmentIds,
+        pendingSegmentIds,
+        completionState,
+        notes,
+      })
+    } catch (err) {
+      setErrMsg(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Não foi possível salvar o registro manual.',
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-line bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-line px-6 py-4">
+          <div>
+            <h3 className="text-base font-semibold text-ink">
+              Adicionar registro manual
+            </h3>
+            <p className="mt-0.5 text-xs text-muted">
+              Se já existir registro para a mesma data, período e território, ele será atualizado.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-muted hover:bg-[#F8FAFC] hover:text-ink"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-3.5 p-6">
+          {errMsg ? (
+            <div className="rounded-xl border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-xs font-medium text-[#B91C1C]">
+              {errMsg}
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted">Data</label>
+              <input
+                type="date"
+                value={isoDate}
+                onChange={(e) => setIsoDate(e.target.value)}
+                className="h-10 w-full rounded-xl border border-line bg-white px-3 text-sm text-ink outline-none focus:border-indigo"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted">Período</label>
+              <select
+                value={periodType}
+                onChange={(e) => setPeriodType(e.target.value as DeparturePeriodType)}
+                className="h-10 w-full rounded-xl border border-line bg-white px-3 text-sm text-ink outline-none focus:border-indigo"
+              >
+                <option value="morning">Saída da manhã</option>
+                <option value="afternoon">Saída da tarde</option>
+                <option value="sunday">Saída de domingo</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted">
+              Local da saída
+            </label>
+            <input
+              type="text"
+              list="manual-location-suggestions"
+              value={locationName}
+              onChange={(e) => setLocationName(e.target.value)}
+              placeholder="Ex.: Salão do Reino ou Casa do irmão..."
+              className="h-10 w-full rounded-xl border border-line bg-white px-3 text-sm text-ink outline-none focus:border-indigo"
+            />
+            <datalist id="manual-location-suggestions">
+              {locations.map((loc) => (
+                <option key={loc.id} value={loc.name} />
+              ))}
+            </datalist>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted">
+              Dirigente(s)
+            </label>
+            <input
+              type="text"
+              list="manual-conductor-suggestions"
+              value={conductorInput}
+              onChange={(e) => setConductorInput(e.target.value)}
+              placeholder="Ex.: Marcos Fernandes, Eber"
+              className="h-10 w-full rounded-xl border border-line bg-white px-3 text-sm text-ink outline-none focus:border-indigo"
+            />
+            <datalist id="manual-conductor-suggestions">
+              {conductorOptions.map((c) => (
+                <option key={c.id} value={c.name} />
+              ))}
+            </datalist>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted">
+                Território
+              </label>
+              <select
+                value={territoryId}
+                onChange={(e) => setTerritoryId(e.target.value)}
+                className="h-10 w-full rounded-xl border border-line bg-white px-3 text-sm text-ink outline-none focus:border-indigo"
+              >
+                {territories.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.code} — {t.regionName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted">Estado</label>
+              <select
+                value={completionState}
+                onChange={(e) =>
+                  setCompletionState(e.target.value as 'completed' | 'partial')
+                }
+                className="h-10 w-full rounded-xl border border-line bg-white px-3 text-sm text-ink outline-none focus:border-indigo"
+              >
+                <option value="completed">Trabalhado (concluído)</option>
+                <option value="partial">Parcial</option>
+              </select>
+            </div>
+          </div>
+
+          {completionState === 'partial' && terrSegments.length > 0 ? (
+            <div>
+              <span className="mb-1.5 block text-xs font-medium text-muted">
+                Segmentos trabalhados:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {terrSegments.map((seg) => {
+                  const checked = selectedSegIds.includes(seg.id)
+                  return (
+                    <button
+                      key={seg.id}
+                      type="button"
+                      onClick={() =>
+                        setSelectedSegIds((prev) =>
+                          checked
+                            ? prev.filter((id) => id !== seg.id)
+                            : [...prev, seg.id],
+                        )
+                      }
+                      className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold ${
+                        checked
+                          ? 'border-[#16A34A] bg-[#DCFCE7] text-[#166534]'
+                          : 'border-line bg-[#F8FAFC] text-muted'
+                      }`}
+                    >
+                      {checked ? <Check size={12} /> : null}
+                      {seg.description}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted">
+              Observações
+            </label>
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Opcional"
+              className="h-10 w-full rounded-xl border border-line bg-white px-3 text-sm text-ink outline-none focus:border-indigo"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-line px-6 py-4">
           <button
             type="button"
             onClick={onClose}
             className="h-9 rounded-xl border border-line bg-white px-4 text-xs font-semibold text-ink hover:bg-[#F8FAFC]"
           >
-            Fechar
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void handleSubmit()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-indigo px-4 text-xs font-semibold text-white hover:bg-indigo/90 disabled:opacity-50"
+          >
+            <Check size={14} />
+            {saving ? 'Salvando...' : 'Salvar registro'}
           </button>
         </div>
       </div>

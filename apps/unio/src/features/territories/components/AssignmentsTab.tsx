@@ -116,7 +116,7 @@ export function AssignmentsTab({
 }: {
   externalIsoDate?: string | null
   onClearExternalIsoDate?: () => void
-  onNavigateToHistory: (locationName?: string) => void
+  onNavigateToHistory: (locationName?: string, territoryId?: string) => void
 }) {
   const {
     canManage,
@@ -159,7 +159,9 @@ export function AssignmentsTab({
   // Suggestion controls
   const [requestedVolume, setRequestedVolume] = useState<number | undefined>(undefined)
   const [variationIndex, setVariationIndex] = useState(0)
+  const [suggestionOpen, setSuggestionOpen] = useState(false)
   const [suggestionDetailsOpen, setSuggestionDetailsOpen] = useState(false)
+  const [inspectedTerritoryId, setInspectedTerritoryId] = useState<string | null>(null)
 
   // Feedback & drawers
   const [savingMode, setSavingMode] = useState<'none' | 'draft' | 'assigned'>('none')
@@ -743,6 +745,24 @@ export function AssignmentsTab({
     isLocked,
     allowedTerritoryIds,
     selectedTerritoryIds,
+  ])
+
+  const inspectedTerritoryHistory = useMemo(() => {
+    if (!inspectedTerritoryId) return []
+    return buildTerritoryTimeline({
+      assignments,
+      workSessions,
+      territoriesById,
+      excludeAssignmentId: currentSavedAssignmentId,
+    })
+      .filter((item) => item.territoryIds.includes(inspectedTerritoryId))
+      .slice(0, 3)
+  }, [
+    inspectedTerritoryId,
+    assignments,
+    workSessions,
+    territoriesById,
+    currentSavedAssignmentId,
   ])
 
   // Selected territories ordered naturally
@@ -1891,7 +1911,9 @@ export function AssignmentsTab({
                                       >
                                         parcial
                                       </span>
-                                    ) : seg.status === 'completed' ? (
+                                    ) : seg.status === 'completed' &&
+                                      (statusesById.get(t.id)?.status !== 'available' ||
+                                        effSegs.some((s) => s.isMissingInCycle)) ? (
                                       <span
                                         className={`rounded px-1 text-[9px] ${
                                           isChosen
@@ -1969,16 +1991,32 @@ export function AssignmentsTab({
           <>
           {/* Card: Territórios disponíveis neste local */}
           <div className="rounded-2xl border border-line bg-white p-5">
-            <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <MapIcon size={18} className="text-indigo" />
                 <h3 className="text-base font-semibold text-ink">
                   Territórios disponíveis neste local
                 </h3>
               </div>
+
+              {canEditForm ? (
+                <button
+                  type="button"
+                  onClick={() => setSuggestionOpen((v) => !v)}
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition ${
+                    suggestionOpen
+                      ? 'border-[#BBF7D0] bg-[#ECFDF5] text-[#166534]'
+                      : 'border-[#C7D2FE] bg-[#EEF2FF] text-indigo hover:bg-[#E0E7FF]'
+                  }`}
+                >
+                  <Sparkles size={13} />
+                  {suggestionOpen ? 'Ocultar sugestão' : 'Gerar sugestão'}
+                </button>
+              ) : null}
             </div>
 
-            {/* Embedded Compact Smart Suggestion Strip */}
+            {/* Embedded Compact Smart Suggestion Strip (conditional) */}
+            {suggestionOpen ? (
             <div className="mb-3.5 rounded-xl border border-[#BBF7D0] bg-[#ECFDF5]/60 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
@@ -2148,6 +2186,7 @@ export function AssignmentsTab({
                 </div>
               ) : null}
             </div>
+            ) : null}
 
             <div className="mb-3.5">
               <TerritoryStatusLegend />
@@ -2183,11 +2222,106 @@ export function AssignmentsTab({
                               snapshot={snap}
                               selected={isSelected}
                               disabled={!canEditForm}
-                              onClick={() => toggleTerritoryManual(territory.id)}
+                              onClick={() => {
+                                setInspectedTerritoryId(territory.id)
+                                toggleTerritoryManual(territory.id)
+                              }}
                             />
                           )
                         })}
                       </div>
+
+                      {/* Quick Territory History Dropdown when clicking a territory pill */}
+                      {(() => {
+                        const inspected = items.find((item) => item.id === inspectedTerritoryId)
+                        if (!inspected) return null
+                        const snap = statusesById.get(inspected.id)
+                        return (
+                          <div className="mt-3 rounded-xl border border-[#C7D2FE] bg-white p-3 shadow-2xs">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="text-xs font-bold text-ink">
+                                    Território {inspected.code}
+                                  </span>
+                                  <span className="text-[11px] text-muted">
+                                    ({inspected.regionName})
+                                  </span>
+                                </div>
+                                <p className="mt-0.5 text-xs text-[#334155]">
+                                  {snap?.lastWorkedIsoDate ? (
+                                    <>
+                                      Último feito em{' '}
+                                      <strong className="text-ink">
+                                        {formatShortDayMonth(snap.lastWorkedIsoDate)}/
+                                        {snap.lastWorkedIsoDate.slice(0, 4)}
+                                      </strong>
+                                      {snap.daysSinceLastWork !== null
+                                        ? ` (há ${snap.daysSinceLastWork} ${
+                                            snap.daysSinceLastWork === 1 ? 'dia' : 'dias'
+                                          })`
+                                        : ''}
+                                      {snap.lastWorkedConductorNames.length > 0
+                                        ? ` • ${snap.lastWorkedConductorNames.join(', ')}`
+                                        : ''}
+                                    </>
+                                  ) : (
+                                    'Ainda sem execução registrada no histórico.'
+                                  )}
+                                </p>
+                                {snap?.missingSegmentCodes && snap.missingSegmentCodes.length > 0 ? (
+                                  <p className="mt-0.5 text-[11px] font-semibold text-[#1E40AF]">
+                                    Falta: {snap.missingSegmentCodes.join(', ')}
+                                  </p>
+                                ) : null}
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setInspectedTerritoryId(null)}
+                                className="rounded-lg p-1 text-muted hover:bg-[#F8FAFC] hover:text-ink"
+                                aria-label="Fechar resumo do território"
+                              >
+                                <X size={13} />
+                              </button>
+                            </div>
+
+                            {inspectedTerritoryHistory.length > 0 ? (
+                              <div className="mt-2 space-y-1 border-t border-line pt-2">
+                                {inspectedTerritoryHistory.map((row) => (
+                                  <div
+                                    key={row.id}
+                                    className="flex items-center justify-between gap-2 text-[11px]"
+                                  >
+                                    <span className="text-muted">
+                                      <strong className="text-ink">
+                                        {formatShortDayMonth(row.isoDate)}
+                                      </strong>{' '}
+                                      • {row.locationName}
+                                    </span>
+                                    <span className="truncate font-medium text-[#475569]">
+                                      {row.conductorNames.length > 0
+                                        ? row.conductorNames.join(', ')
+                                        : '—'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+
+                            <div className="mt-2.5 flex justify-end border-t border-line pt-2">
+                              <button
+                                type="button"
+                                onClick={() => onNavigateToHistory(undefined, inspected.id)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-line bg-[#F8FAFC] px-2.5 py-1 text-[11px] font-semibold text-indigo transition hover:border-[#C7D2FE] hover:bg-[#EEF2FF]"
+                              >
+                                <History size={12} />
+                                Abrir histórico deste território
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })()}
 
                       {/* Inline segment picker right inside the region card for selected territories */}
                       {selectedInRegion.length > 0 ? (
@@ -2246,7 +2380,9 @@ export function AssignmentsTab({
                                             >
                                               falta
                                             </span>
-                                          ) : seg.status === 'completed' ? (
+                                          ) : seg.status === 'completed' &&
+                                            (statusesById.get(t.id)?.status !== 'available' ||
+                                              effSegs.some((s) => s.isMissingInCycle)) ? (
                                             <span
                                               className={`rounded px-1 text-[9px] ${
                                                 isChosen

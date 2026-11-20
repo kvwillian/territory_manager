@@ -18,8 +18,10 @@ import {
   deleteRegionDoc,
   deleteRecurringDepartureDoc,
   deleteTerritoryDoc,
+  deleteWorkSessionDoc,
   importHistoryWorkSessionsBatch,
   loadTerritoriesBundle,
+  markAssignmentFeedbackDoc,
   recordTerritoryExecutionDoc,
   saveAssignmentDoc,
   saveRecurringDepartureDoc,
@@ -138,6 +140,11 @@ export type TerritoriesContextValue = {
     > & { conductorNames: string[] },
   ) => Promise<string>
   deleteAssignment: (assignmentId: string) => Promise<void>
+  deleteWorkSession: (workSessionId: string) => Promise<void>
+  markAssignmentFeedback: (
+    assignmentId: string,
+    skippedTerritoryIds: string[],
+  ) => Promise<void>
   recordTerritoryExecution: (
     payload: Omit<RecordTerritoryExecutionPayload, 'congregationId'>,
   ) => Promise<void>
@@ -946,6 +953,14 @@ export function TerritoriesProvider({ children }: { children: ReactNode }) {
       },
       async deleteAssignment(assignmentId) {
         await deleteAssignmentDoc(assignmentId)
+        await reload()
+      },
+      async deleteWorkSession(workSessionId) {
+        await deleteWorkSessionDoc(workSessionId)
+        await reload()
+      },
+      async markAssignmentFeedback(assignmentId, skippedTerritoryIds) {
+        await markAssignmentFeedbackDoc(assignmentId, skippedTerritoryIds)
         await reload()
       },
       async recordTerritoryExecution(payload) {

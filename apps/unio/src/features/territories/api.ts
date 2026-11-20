@@ -454,6 +454,8 @@ export async function loadTerritoriesBundle(congregationId: string): Promise<Loa
         territoryIds: territorySnapshots.map((s) => s.id),
         territorySnapshots,
         assignedSegmentsByTerritory,
+        feedbackConfirmed: data.feedbackConfirmed === true,
+        skippedTerritoryIds: asStringArray(data.skippedTerritoryIds),
         notes: asString(data.notes),
         updatedAtIso: firestoreDateToIso(data.updatedAt) ?? firestoreDateToIso(data.createdAt),
       }
@@ -510,6 +512,8 @@ export async function loadTerritoriesBundle(congregationId: string): Promise<Loa
         notes,
         completionState,
         periodType,
+        locationName: asString(data.locationName) || undefined,
+        assignmentId: asString(data.assignmentId) || null,
         regionId: asString(data.regionId) || null,
         regionName: asString(data.regionName) || undefined,
         territoryCodeRaw: asString(data.territoryCodeRaw) || undefined,
@@ -1080,6 +1084,21 @@ export async function deleteAssignmentDoc(assignmentId: string): Promise<void> {
   await deleteDoc(doc(db, 'assignments', assignmentId))
 }
 
+export async function deleteWorkSessionDoc(workSessionId: string): Promise<void> {
+  await deleteDoc(doc(db, 'workSessions', workSessionId))
+}
+
+export async function markAssignmentFeedbackDoc(
+  assignmentId: string,
+  skippedTerritoryIds: string[],
+): Promise<void> {
+  await updateDoc(doc(db, 'assignments', assignmentId), {
+    feedbackConfirmed: true,
+    skippedTerritoryIds,
+    updatedAt: Timestamp.now(),
+  })
+}
+
 export type RecordTerritoryExecutionPayload = {
   congregationId: string
   territoryId: string
@@ -1091,6 +1110,9 @@ export type RecordTerritoryExecutionPayload = {
   pendingSegmentIds: string[]
   completionState: WorkSessionCompletionState
   notes: string
+  periodType?: DeparturePeriodType | null
+  locationName?: string
+  assignmentId?: string | null
   regionId?: string | null
   regionName?: string
   territoryCodeRaw?: string
@@ -1122,9 +1144,24 @@ export async function recordTerritoryExecutionDoc(
     await segBatch.commit()
   }
 
-  // 2. Create workSession document in Firestore
-  const wsRef = doc(collection(db, 'workSessions'))
-  await setDoc(wsRef, {
+  // 2. Upsert workSession document in Firestore (max 1 record per date + period + territory)
+  const existingSnap = await getDocs(
+    query(
+      collection(db, 'workSessions'),
+      where('congregationId', '==', payload.congregationId),
+      where('isoDate', '==', payload.isoDate),
+      where('territoryId', '==', payload.territoryId),
+    ),
+  )
+
+  const targetPeriod = payload.periodType ?? null
+  const matchingDocs = existingSnap.docs.filter((d) => {
+    const docPeriod = asString(d.data().periodType).toLowerCase() || null
+    if (!targetPeriod || !docPeriod) return true
+    return docPeriod === targetPeriod
+  })
+
+  const docData = {
     congregationId: payload.congregationId,
     territoryId: payload.territoryId,
     conductorId: currentUid || payload.conductorUserId || 'conductor',
@@ -1133,14 +1170,33 @@ export async function recordTerritoryExecutionDoc(
     conductorName: payload.conductorName.trim(),
     date: workedTimestamp,
     isoDate: payload.isoDate,
+    periodType: targetPeriod,
+    locationName: (payload.locationName ?? '').trim(),
+    assignmentId: payload.assignmentId ?? null,
     segmentsWorked: payload.completedSegmentIds.filter((id) => !id.startsWith('part-seg:')),
     completionState: payload.completionState,
     regionId: payload.regionId ?? null,
     regionName: payload.regionName ?? '',
     territoryCodeRaw: payload.territoryCodeRaw ?? '',
     notes: payload.notes.trim(),
-    createdAt: Timestamp.now(),
-  })
+    updatedAt: Timestamp.now(),
+  }
+
+  if (matchingDocs.length > 0) {
+    const primary = matchingDocs[0]!
+    await updateDoc(primary.ref, docData)
+    // Clean up any legacy duplicate documents for this same departure/territory
+    for (let i = 1; i < matchingDocs.length; i += 1) {
+      await deleteDoc(matchingDocs[i]!.ref)
+    }
+  } else {
+    const docId = `ws_${payload.congregationId}_${payload.isoDate}_${targetPeriod ?? 'any'}_${payload.territoryId}`
+    await setDoc(
+      doc(db, 'workSessions', docId),
+      { ...docData, createdAt: Timestamp.now() },
+      { merge: true },
+    )
+  }
 }
 
 export type ImportHistoryWorkSessionWriteItem = {

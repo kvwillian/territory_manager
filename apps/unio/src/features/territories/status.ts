@@ -212,11 +212,23 @@ export function buildTerritoryTimeline(params: {
     })
   }
 
+  // Deduplicate workSessions per (isoDate, periodType, territoryId) so the same departure never shows duplicates
+  const dedupedSessionsMap = new Map<string, WorkSessionRecord>()
   for (const session of workSessions) {
+    const dedupKey = `${session.isoDate}::${session.periodType ?? 'any'}::${session.territoryId}`
+    dedupedSessionsMap.set(dedupKey, session)
+  }
+
+  for (const session of dedupedSessionsMap.values()) {
     const territory = territoriesById.get(session.territoryId)
     const regionName = session.regionName || territory?.regionName || ''
     const displayCode =
       territory?.code ?? session.territoryCodeRaw ?? session.territoryId
+    const locationLabel = session.locationName?.trim()
+      ? session.locationName.trim()
+      : regionName
+        ? `Execução em campo (${regionName})`
+        : 'Execução em campo'
     items.push({
       id: `ws-${session.id}`,
       kind: 'workSession',
@@ -224,7 +236,7 @@ export function buildTerritoryTimeline(params: {
       dateEndIso: session.dateEndIso ?? null,
       dateNote: session.dateNote ?? null,
       locationId: null,
-      locationName: regionName ? `Execução em campo (${regionName})` : 'Execução em campo',
+      locationName: locationLabel,
       regionName,
       periodType: session.periodType ?? null,
       conductorNames: session.conductorName ? [session.conductorName] : [],
