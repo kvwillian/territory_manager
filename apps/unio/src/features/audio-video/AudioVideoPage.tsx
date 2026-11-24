@@ -255,7 +255,69 @@ export function AudioVideoPage() {
         </form>
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-2xl border border-line bg-white">
+      <div className="mt-4 rounded-2xl border border-line bg-white">
+        {/* Mobile card list (< md) */}
+        <div className="divide-y divide-line md:hidden">
+          {displayRoster.rows.length === 0 ? (
+            <p className="px-4 py-8 text-sm text-muted">Nenhuma reunião neste mês.</p>
+          ) : displayRoster.rows.map((row, index) => (
+            <div
+              key={row.day}
+              onClick={() => setSelectedDay(row.day)}
+              className={`space-y-3 p-4 ${selectedDay === row.day ? 'bg-indigo-soft' : ''}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-2">
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#F8FAFC] text-sm font-semibold text-ink">
+                    {row.day}
+                  </span>
+                  <span className="text-sm font-medium text-ink">Dia {row.day}</span>
+                  {row.day === nextMeeting?.day ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-indigo-soft px-2 py-0.5 text-[11px] font-medium text-indigo">
+                      <Flag size={11} />
+                      {row.day === today.getDate() ? 'Hoje' : 'Próxima'}
+                    </span>
+                  ) : null}
+                </span>
+                <button
+                  type="button"
+                  aria-label={`Excluir dia ${row.day}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    saveRoster(removeRosterDay(roster, row.day))
+                    if (selectedDay === row.day) setSelectedDay(null)
+                  }}
+                  className="rounded-lg p-2 text-muted hover:bg-[#F8FAFC]"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+              <div className="space-y-2.5">
+                {(['attendants', 'microphones', 'sound'] as const).map((field) => (
+                  <div key={field}>
+                    <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted">
+                      {field === 'attendants' ? 'Indicadores' : field === 'microphones' ? 'Microfones' : 'Mesa de som'}
+                    </span>
+                    <AssignmentSlots
+                      row={row}
+                      field={field}
+                      dark={index % 2 === 1}
+                      publishers={publishers}
+                      publisherStatus={publisherStatus}
+                      onAssign={(slotIndex, name) => {
+                        setSelectedDay(row.day)
+                        saveRoster(assignSlot(addRosterDay(roster, row.day), row.day, field, slotIndex, name))
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tablet & Desktop table (md+) */}
+        <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="bg-[#F8FAFC] text-xs uppercase tracking-wide text-muted">
             <tr>
@@ -339,6 +401,7 @@ export function AudioVideoPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
       <p className="mt-3 text-xs text-muted">Clique em um nome para buscar um publicador habilitado. Selecione o dia para exportar aquela reunião.</p>
 
@@ -392,7 +455,7 @@ export function AudioVideoPage() {
   )
 }
 
-function AssignmentCell({
+function AssignmentSlots({
   row,
   field,
   dark,
@@ -409,21 +472,34 @@ function AssignmentCell({
 }) {
   const slots = [row[field][0] ?? '', row[field][1] ?? '']
   return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {slots.map((name, index) => (
+        <AssigneeField
+          key={index}
+          value={name}
+          field={field}
+          publishers={publishers}
+          publisherStatus={publisherStatus}
+          dark={dark}
+          label={`${fieldLabels[field]} ${index + 1} do dia ${row.day}`}
+          onCommit={(next) => onAssign(index, next)}
+        />
+      ))}
+    </div>
+  )
+}
+
+function AssignmentCell(props: {
+  row: RosterRow
+  field: RosterField
+  dark: boolean
+  publishers: MockPublisher[]
+  publisherStatus: 'loading' | 'ready' | 'error'
+  onAssign: (index: number, name: string) => void
+}) {
+  return (
     <td className="px-3 py-2">
-      <div className="flex flex-wrap items-center gap-1.5">
-        {slots.map((name, index) => (
-          <AssigneeField
-            key={index}
-            value={name}
-            field={field}
-            publishers={publishers}
-            publisherStatus={publisherStatus}
-            dark={dark}
-            label={`${fieldLabels[field]} ${index + 1} do dia ${row.day}`}
-            onCommit={(next) => onAssign(index, next)}
-          />
-        ))}
-      </div>
+      <AssignmentSlots {...props} />
     </td>
   )
 }

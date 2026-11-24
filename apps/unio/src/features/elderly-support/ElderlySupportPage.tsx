@@ -390,7 +390,121 @@ export function ElderlySupportPage() {
         </div>
       ) : null}
 
-      <div className="mt-4 overflow-x-auto rounded-2xl border border-line bg-white">
+      <div className="mt-4 rounded-2xl border border-line bg-white">
+        {/* Mobile card list (< md) */}
+        <div className="divide-y divide-line md:hidden">
+          {loading ? (
+            <p className="px-4 py-8 text-sm text-muted">Carregando a escala…</p>
+          ) : !allowed ? (
+            <p className="px-4 py-8 text-sm text-muted">
+              Você não pode gerenciar o suporte a idosos desta congregação.
+            </p>
+          ) : groups.length === 0 ? (
+            <p className="px-4 py-8 text-sm text-muted">
+              {query.trim()
+                ? 'Nenhuma designação encontrada.'
+                : 'Nenhuma reunião neste mês.'}
+            </p>
+          ) : (
+            groups.map((group) => (
+              <div key={group.date} className="space-y-3 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-indigo-soft text-base font-semibold text-indigo">
+                      {dayNumber(group.date)}
+                    </span>
+                    <div>
+                      <div className="text-sm font-semibold">{weekdayLabel(group.date)}</div>
+                      {editing ? (
+                        <input
+                          type="date"
+                          value={group.date}
+                          aria-label={`Data de ${weekdayLabel(group.date)}`}
+                          onChange={(event) => moveGroup(group.date, event.target.value)}
+                          className="mt-1 h-8 rounded-lg border border-line px-2 text-xs"
+                        />
+                      ) : (
+                        <div className="text-xs text-muted">{displayDate(group.date)}</div>
+                      )}
+                    </div>
+                  </div>
+                  {editing ? (
+                    <button
+                      type="button"
+                      onClick={() => addRow(group.date)}
+                      className="text-xs font-semibold text-indigo"
+                    >
+                      + Idoso
+                    </button>
+                  ) : null}
+                </div>
+                <div className="space-y-2.5">
+                  {group.rows.map((row) => (
+                    <div key={row.key} className="rounded-xl border border-line bg-[#F8FAFC] p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <div>
+                            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">Idoso</span>
+                            {editing ? (
+                              <PersonField
+                                value={row.elderlyName}
+                                label={`Idoso em ${displayDate(row.date)}`}
+                                publishers={elderlyPeople}
+                                publisherStatus="ready"
+                                emptyMessage="Ninguém marcado como precisa de apoio."
+                                onCommit={(person) => updateRow(row.key, 'elderly', person)}
+                              />
+                            ) : row.elderlyName ? (
+                              <span className="flex min-w-0 items-center gap-2">
+                                <Avatar name={row.elderlyName} />
+                                <span className="truncate text-sm font-medium">{row.elderlyName}</span>
+                              </span>
+                            ) : (
+                              <span className="text-sm text-muted">—</span>
+                            )}
+                          </div>
+                          <div>
+                            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted">Motorista</span>
+                            {editing ? (
+                              <PersonField
+                                value={row.driverName}
+                                label={`Motorista em ${displayDate(row.date)}`}
+                                publishers={drivers}
+                                publisherStatus="ready"
+                                emptyMessage="Ninguém marcado como motorista."
+                                onCommit={(person) => updateRow(row.key, 'driver', person)}
+                              />
+                            ) : row.driverName ? (
+                              <span className="flex min-w-0 items-center gap-2">
+                                <Avatar name={row.driverName} />
+                                <span className="truncate text-sm font-medium">{row.driverName}</span>
+                              </span>
+                            ) : (
+                              <span className="text-sm text-muted">—</span>
+                            )}
+                          </div>
+                        </div>
+                        <RowMenu
+                          editing={editing}
+                          onEdit={startEdit}
+                          onClear={() => updateRow(row.key, 'driver', { name: '' })}
+                          onRemove={() => {
+                            const others = monthRows.some((item) => item.date === row.date && item.key !== row.key)
+                            setRows((current) => current.filter((item) => item.key !== row.key))
+                            if (!others) setHiddenDates((current) => (current.includes(row.date) ? current : [...current, row.date]))
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Tablet & Desktop grid table (md+) */}
+        <div className="hidden overflow-x-auto md:block">
         <div className="min-w-[760px]">
           <div className="grid grid-cols-[88px_148px_minmax(0,1fr)_minmax(0,1fr)_44px] px-2 text-[11px] font-medium uppercase tracking-wide text-muted">
             <div className="px-4 py-3">Data</div>
@@ -502,6 +616,7 @@ export function ElderlySupportPage() {
               </div>
             ))
           )}
+        </div>
         </div>
       </div>
     </div>

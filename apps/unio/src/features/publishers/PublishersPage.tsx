@@ -378,7 +378,28 @@ export function PublishersPage() {
               />
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3 text-sm text-muted">
                 <span>{from}-{to} de {filtered.length} publicadores</span>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2 sm:hidden">
+                  <button
+                    type="button"
+                    disabled={currentPage === 1}
+                    onClick={() => setPage(currentPage - 1)}
+                    className="h-8 rounded-lg border border-line px-2.5 text-xs font-medium text-ink disabled:opacity-40"
+                  >
+                    Anterior
+                  </button>
+                  <span className="text-xs font-medium text-ink tabular-nums">
+                    {currentPage} / {pages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={currentPage === pages}
+                    onClick={() => setPage(currentPage + 1)}
+                    className="h-8 rounded-lg border border-line px-2.5 text-xs font-medium text-ink disabled:opacity-40"
+                  >
+                    Próxima
+                  </button>
+                </div>
+                <div className="hidden flex-wrap items-center gap-1 sm:flex">
                   <button type="button" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} className="h-8 rounded-lg border border-line px-2 disabled:opacity-40">‹</button>
                   {Array.from({ length: pages }, (_, index) => index + 1).map((item) => (
                     <button key={item} type="button" onClick={() => setPage(item)} className={`h-8 min-w-8 rounded-lg px-2 ${item === currentPage ? 'bg-indigo text-white' : 'border border-line'}`}>{item}</button>
@@ -1139,8 +1160,99 @@ function PublisherTable({
   const colSpan = selectionMode ? 8 : 7
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[860px] text-left text-sm">
+    <>
+      {/* Mobile card list (< md) */}
+      <div className="divide-y divide-line border-t border-line md:hidden">
+        {selectionMode && publishers.length > 0 ? (
+          <div className="flex items-center justify-between bg-[#F8FAFC] px-4 py-2.5 text-xs font-medium text-muted">
+            <label className="flex items-center gap-2.5">
+              <Checkbox
+                ariaLabel="Selecionar todos desta página"
+                checked={allVisibleSelected}
+                indeterminate={someVisibleSelected}
+                onChange={onToggleAll}
+              />
+              <span>Selecionar todos desta página</span>
+            </label>
+          </div>
+        ) : null}
+        {publishers.length === 0 ? (
+          <p className="px-4 py-8 text-sm text-muted">Nenhum publicador encontrado.</p>
+        ) : publishers.map((publisher) => {
+          const group = groups.find((item) => item.id === publisher.groupId)
+          const checked = selectionMode && selectedIds.includes(publisher.id)
+          return (
+            <div
+              key={publisher.id}
+              onClick={selectionMode ? () => onToggleOne(publisher.id) : undefined}
+              className={`px-4 py-3.5 ${selectionMode ? 'cursor-pointer active:bg-[#F8FAFC]' : ''} ${checked ? 'bg-indigo-soft/30' : ''}`}
+            >
+              <div className="flex items-start justify-between gap-2.5">
+                <div className="flex min-w-0 items-center gap-3">
+                  {selectionMode ? (
+                    <div onClick={(event) => event.stopPropagation()}>
+                      <Checkbox
+                        ariaLabel={`Selecionar ${publisher.name}`}
+                        checked={checked}
+                        onChange={() => onToggleOne(publisher.id)}
+                      />
+                    </div>
+                  ) : null}
+                  <Avatar name={publisher.name} />
+                  <div className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-ink">{publisher.name}</span>
+                    <span className="block text-xs text-muted">
+                      {publisher.age > 0 ? `${publisher.age} anos` : 'Idade não informada'} · {publisher.gender === 'feminino' ? 'Feminino' : 'Masculino'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5" onClick={(event) => event.stopPropagation()}>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${publisher.status === 'active' ? 'bg-[#ECFDF5] text-[#047857]' : 'bg-[#F1F5F9] text-[#64748B]'}`}>
+                    {publisher.status === 'active' ? 'Ativo' : 'Inativo'}
+                  </span>
+                  <RowActionsMenu
+                    publisherName={publisher.name}
+                    selectionMode={selectionMode}
+                    checked={checked}
+                    onEdit={() => onEdit(publisher)}
+                    onSelect={() => {
+                      if (selectionMode) onToggleOne(publisher.id)
+                      else onStartSelection(publisher)
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="mt-2.5 flex flex-wrap items-center gap-2 pl-12 text-xs">
+                {group ? (
+                  <GroupChip group={group} />
+                ) : publisher.privilege === 'circuitOverseer' ? (
+                  <span className="inline-flex items-center rounded-full border border-[#FDE68A] bg-[#FEF3C7] px-2 py-0.5 text-xs font-semibold text-[#92400E]">
+                    Circuito (Especial)
+                  </span>
+                ) : (
+                  <span className="text-muted">Sem grupo</span>
+                )}
+                {publisher.privilege === 'circuitOverseer' ? (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[#FDE68A] bg-[#FEF3C7] px-2.5 py-0.5 text-xs font-semibold text-[#92400E]">
+                    {privilegeLabel(publisher)}
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-[#F8FAFC] px-2.5 py-0.5 text-xs font-medium text-[#334155]">
+                    {privilegeLabel(publisher)}
+                  </span>
+                )}
+                {publisher.phone ? (
+                  <span className="text-muted">{publisher.phone}</span>
+                ) : null}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Tablet & Desktop table (md+) */}
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full min-w-[860px] text-left text-sm">
         <thead className="text-[11px] uppercase tracking-wide text-muted">
           <tr className="border-t border-line">
             {selectionMode ? (
@@ -1238,7 +1350,8 @@ function PublisherTable({
           })}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   )
 }
 

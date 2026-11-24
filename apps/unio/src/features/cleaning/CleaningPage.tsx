@@ -101,7 +101,42 @@ export function CleaningPage() {
           <ChevronRight size={16} />
         </button>
       </div>
-      <div className="mt-4 overflow-x-auto rounded-2xl border border-line bg-white">
+      <div className="mt-4 rounded-2xl border border-line bg-white">
+        {/* Mobile card list (< md) */}
+        <div className="divide-y divide-line md:hidden">
+          {rows.length === 0 ? (
+            <p className="px-4 py-8 text-sm text-muted">Nenhuma reunião neste mês.</p>
+          ) : rows.map((meeting) => (
+            <div key={meeting.id} className="space-y-2.5 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold">{shortDate(meeting.isoDate)}</span>
+                <span className="rounded-full bg-[#F8FAFC] px-2.5 py-0.5 text-xs font-medium text-muted">
+                  {kindMeta[meeting.kind].meetingLabel}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  value={drafts[meeting.id] ?? people[meeting.id] ?? ''}
+                  aria-label={`Responsável em ${shortDate(meeting.isoDate)}`}
+                  placeholder="Nome do responsável"
+                  onChange={(event) => assign(meeting, event.target.value)}
+                  className="h-10 min-w-0 flex-1 rounded-xl border border-line px-3 text-sm text-ink"
+                />
+                <button
+                  type="button"
+                  disabled={sending === meeting.id}
+                  onClick={() => void send(meeting)}
+                  className="h-10 shrink-0 rounded-xl bg-indigo px-3.5 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  {sending === meeting.id ? 'Enviando…' : 'Enviar'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tablet & Desktop table (md+) */}
+        <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="bg-[#F8FAFC] text-xs uppercase tracking-wide text-muted">
             <tr>
@@ -138,6 +173,7 @@ export function CleaningPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

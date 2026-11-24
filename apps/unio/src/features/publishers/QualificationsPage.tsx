@@ -1138,8 +1138,104 @@ function PublishersTabView({
         </button>
       </div>
 
-      {/* Tabela de publicadores */}
-      <div className="overflow-x-auto">
+      {/* Mobile card list (< md) */}
+      <div className="divide-y divide-line border-t border-line md:hidden">
+        {publishers.length === 0 ? (
+          <p className="px-4 py-10 text-center text-sm text-muted">
+            Nenhum publicador encontrado para os filtros selecionados.
+          </p>
+        ) : (
+          publishers.map((publisher) => {
+            const group = groups.find((item) => item.id === publisher.groupId)
+            const tone = group ? groupTones[group.tone] : null
+            const functions = enabledFunctionsOf(publisher)
+            const isSelected = selectedPublisherId === publisher.id
+            const isDirty = dirtyPublisherIds.has(publisher.id)
+
+            return (
+              <div
+                key={publisher.id}
+                onClick={() => onSelectPublisher(publisher)}
+                className={`cursor-pointer space-y-2.5 p-4 transition-colors ${
+                  isDirty ? 'shadow-[inset_3px_0_0_var(--color-indigo)]' : ''
+                } ${
+                  isSelected
+                    ? 'bg-indigo-soft/45'
+                    : isDirty
+                      ? 'bg-indigo-soft/20 active:bg-[#F8FAFC]'
+                      : 'active:bg-[#F8FAFC]'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2.5">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-indigo-soft text-xs font-semibold text-indigo">
+                      {initials(publisher.name)}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-sm font-medium text-ink">{publisher.name}</span>
+                        {publisher.status === 'inactive' ? (
+                          <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-muted">
+                            Inativo
+                          </span>
+                        ) : null}
+                        {isDirty ? (
+                          <span
+                            title="Alterações pendentes"
+                            className="h-2 w-2 shrink-0 rounded-full bg-[#F59E0B]"
+                          />
+                        ) : null}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        {group && tone ? (
+                          <span
+                            className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
+                            style={{ background: tone.chip, color: tone.text }}
+                          >
+                            {group.name}
+                          </span>
+                        ) : publisher.privilege === 'circuitOverseer' ? (
+                          <span className="inline-flex items-center rounded-full border border-[#FDE68A] bg-[#FEF3C7] px-2 py-0.5 text-[11px] font-semibold text-[#92400E]">
+                            Circuito (Especial)
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-muted">Sem grupo</span>
+                        )}
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${privilegeBadgeClass(publisher)}`}
+                        >
+                          {privilegeLabel(publisher)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onSelectPublisher(publisher)
+                    }}
+                    className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-medium transition ${
+                      isSelected
+                        ? 'border-indigo bg-indigo text-white'
+                        : 'border-line bg-white text-[#334155]'
+                    }`}
+                  >
+                    <Pencil size={13} />
+                    Editar
+                  </button>
+                </div>
+                <div className="pl-12">
+                  <FunctionsSummaryBadge functions={functions} />
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {/* Tabela de publicadores (md+) */}
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="text-[11px] font-semibold uppercase tracking-wider text-muted">
             <tr className="border-t border-line bg-[#F8FAFC]">
@@ -1401,7 +1497,80 @@ function GroupsTabView({
           </button>
         </div>
 
-        <div className="mt-4 overflow-x-auto">
+        {/* Mobile card list (< md) */}
+        <div className="mt-4 divide-y divide-line rounded-2xl border border-line md:hidden">
+          {members.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-muted">
+              Nenhum integrante neste grupo.
+            </p>
+          ) : (
+            members.map((member) => {
+              const functions = enabledFunctionsOf(member)
+              const isSg = group?.superintendentPublisherId === member.id
+              const isAssistant = group?.assistantPublisherId === member.id
+              const isSelected = selectedPublisherId === member.id
+              const isDirty = dirtyPublisherIds.has(member.id)
+              return (
+                <div
+                  key={member.id}
+                  onClick={() => onSelectPublisher(member)}
+                  className={`cursor-pointer space-y-2.5 p-3.5 ${
+                    isSelected ? 'bg-indigo-soft/45' : 'active:bg-[#F8FAFC]'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-indigo-soft text-xs font-semibold text-indigo">
+                        {initials(member.name)}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate text-sm font-medium text-ink">{member.name}</span>
+                          {isDirty ? (
+                            <span className="h-2 w-2 shrink-0 rounded-full bg-[#F59E0B]" title="Alterações pendentes" />
+                          ) : null}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          {isSg ? (
+                            <span className="rounded-full bg-indigo px-2 py-0.5 text-[10px] font-semibold text-white">
+                              SG
+                            </span>
+                          ) : null}
+                          {isAssistant ? (
+                            <span className="rounded-full bg-indigo-soft px-2 py-0.5 text-[10px] font-semibold text-indigo">
+                              Ajudante
+                            </span>
+                          ) : null}
+                          <span
+                            className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${privilegeBadgeClass(member)}`}
+                          >
+                            {privilegeLabel(member)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onSelectPublisher(member)
+                      }}
+                      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl border border-line bg-white px-2.5 text-xs font-medium text-[#334155]"
+                    >
+                      <Pencil size={13} />
+                      Editar
+                    </button>
+                  </div>
+                  <div className="pl-11">
+                    <FunctionsSummaryBadge functions={functions} />
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        <div className="mt-4 hidden overflow-x-auto md:block">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="text-[11px] font-semibold uppercase tracking-wider text-muted">
               <tr className="bg-[#F8FAFC]">
@@ -1742,7 +1911,93 @@ function FunctionsTabView({
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Mobile card list (< md) */}
+        <div className="divide-y divide-line border-t border-line md:hidden">
+          {enabledInFunction.length === 0 ? (
+            <p className="px-4 py-10 text-center text-sm text-muted">
+              Nenhum publicador habilitado em <strong>{activeMeta.label}</strong> com os filtros atuais.
+            </p>
+          ) : (
+            enabledInFunction.map((publisher) => {
+              const group = groups.find((item) => item.id === publisher.groupId)
+              const tone = group ? groupTones[group.tone] : null
+              const otherFunctions = enabledFunctionsOf(publisher).filter(
+                (fn) => fn.key !== selectedFunctionKey,
+              )
+              const isSelected = selectedPublisherId === publisher.id
+              const isDirty = dirtyPublisherIds.has(publisher.id)
+
+              return (
+                <div
+                  key={publisher.id}
+                  onClick={() => onSelectPublisher(publisher)}
+                  className={`cursor-pointer space-y-2.5 p-4 ${
+                    isSelected ? 'bg-indigo-soft/45' : 'active:bg-[#F8FAFC]'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-indigo-soft text-xs font-semibold text-indigo">
+                        {initials(publisher.name)}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate text-sm font-medium text-ink">{publisher.name}</span>
+                          {isDirty ? (
+                            <span className="h-2 w-2 shrink-0 rounded-full bg-[#F59E0B]" title="Alterações pendentes" />
+                          ) : null}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          {group && tone ? (
+                            <span
+                              className="inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium"
+                              style={{ background: tone.chip, color: tone.text }}
+                            >
+                              {group.name}
+                            </span>
+                          ) : publisher.privilege === 'circuitOverseer' ? (
+                            <span className="inline-flex rounded-full border border-[#FDE68A] bg-[#FEF3C7] px-2 py-0.5 text-[11px] font-semibold text-[#92400E]">
+                              Circuito (Especial)
+                            </span>
+                          ) : (
+                            <span className="inline-flex rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[11px] font-medium text-muted">
+                              Sem grupo
+                            </span>
+                          )}
+                          <span
+                            className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${privilegeBadgeClass(publisher)}`}
+                          >
+                            {privilegeLabel(publisher)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onSelectPublisher(publisher)
+                      }}
+                      className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-medium ${
+                        isSelected
+                          ? 'border-indigo bg-indigo text-white'
+                          : 'border-line bg-white text-[#334155]'
+                      }`}
+                    >
+                      <Pencil size={13} />
+                      Editar
+                    </button>
+                  </div>
+                  <div className="pl-12">
+                    <FunctionsSummaryBadge functions={otherFunctions} />
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[680px] text-left text-sm">
             <thead className="text-[11px] font-semibold uppercase tracking-wider text-muted">
               <tr className="bg-[#F8FAFC]">

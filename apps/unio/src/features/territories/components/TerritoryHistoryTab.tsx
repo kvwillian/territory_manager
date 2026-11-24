@@ -823,149 +823,222 @@ export function TerritoryHistoryTab({
                 : 'Ajuste os filtros acima ou salve designações na aba "Designações".'}
             </p>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-line bg-[#F8FAFC] text-xs font-semibold text-muted">
-                  <th className="px-5 py-3">Data</th>
-                  <th className="px-3 py-3">Dia</th>
-                  <th className="px-3 py-3">
-                    {historyView === 'confirmed' ? 'Região / Local' : 'Local da saída'}
-                  </th>
-                  <th className="px-3 py-3">Dirigente(s)</th>
-                  <th className="px-3 py-3">
-                    {historyView === 'confirmed' ? 'Territórios feitos' : 'Territórios designados'}
-                  </th>
-                  <th className="px-5 py-3 text-right">Detalhes</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {visibleRows.map((row) => {
-                  const dayKey = weekdayKeyFromIso(row.isoDate)
-                  const ws = row.kind === 'workSession' ? workSessionsById.get(row.id) : undefined
-                  const assignment =
-                    row.kind === 'assignment' ? assignmentsById.get(row.id) : undefined
-                  const resolvedSegmentCodes: string[] = []
-                  if (ws && ws.segmentsWorked.length > 0) {
-                    for (const sid of ws.segmentsWorked) {
-                      const desc = segmentsById.get(sid)?.description
-                      if (desc && !resolvedSegmentCodes.includes(desc)) {
-                        resolvedSegmentCodes.push(desc)
-                      }
-                    }
-                  } else if (assignment) {
-                    for (const snap of assignment.territorySnapshots) {
-                      if (snap.assignedSegmentCodes && snap.assignedSegmentCodes.length > 0) {
-                        for (const desc of snap.assignedSegmentCodes) {
-                          if (desc && !resolvedSegmentCodes.includes(desc)) {
-                            resolvedSegmentCodes.push(desc)
-                          }
-                        }
-                      }
+        ) : (() => {
+          const enrichedRows = visibleRows.map((row) => {
+            const dayKey = weekdayKeyFromIso(row.isoDate)
+            const ws = row.kind === 'workSession' ? workSessionsById.get(row.id) : undefined
+            const assignment =
+              row.kind === 'assignment' ? assignmentsById.get(row.id) : undefined
+            const resolvedSegmentCodes: string[] = []
+            if (ws && ws.segmentsWorked.length > 0) {
+              for (const sid of ws.segmentsWorked) {
+                const desc = segmentsById.get(sid)?.description
+                if (desc && !resolvedSegmentCodes.includes(desc)) {
+                  resolvedSegmentCodes.push(desc)
+                }
+              }
+            } else if (assignment) {
+              for (const snap of assignment.territorySnapshots) {
+                if (snap.assignedSegmentCodes && snap.assignedSegmentCodes.length > 0) {
+                  for (const desc of snap.assignedSegmentCodes) {
+                    if (desc && !resolvedSegmentCodes.includes(desc)) {
+                      resolvedSegmentCodes.push(desc)
                     }
                   }
-                  const territoryBadgeText =
-                    resolvedSegmentCodes.length > 0
-                      ? resolvedSegmentCodes.join(', ')
-                      : row.territoryCodeRaw?.trim() || row.territoryCodes.join(', ')
+                }
+              }
+            }
+            const territoryBadgeText =
+              resolvedSegmentCodes.length > 0
+                ? resolvedSegmentCodes.join(', ')
+                : row.territoryCodeRaw?.trim() || row.territoryCodes.join(', ')
+            const statusBadge =
+              row.kind === 'workSession' ? (
+                row.completionState === 'partial' ? (
+                  <span className="rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10px] font-semibold text-[#1E40AF]">
+                    Parcial (parte)
+                  </span>
+                ) : row.completionState === 'incomplete' ? (
+                  <span className="rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold text-[#92400E]">
+                    Incompleto
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#166534]">
+                    Trabalhado
+                  </span>
+                )
+              ) : row.executedTerritoryIds.length > 0 ? (
+                <span className="rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#166534]">
+                  Execução registrada
+                </span>
+              ) : (
+                <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#475569]">
+                  Designado
+                </span>
+              )
+            return { row, dayKey, territoryBadgeText, statusBadge }
+          })
 
-                  return (
-                    <tr
-                      key={row.id}
-                      onClick={() => setSelectedEntryId(row.id)}
-                      className="cursor-pointer transition hover:bg-[#F8FAFC]"
-                    >
-                      <td className="px-5 py-3.5 font-medium whitespace-nowrap text-ink">
-                        <span title={formatFullDateBr(row.isoDate)}>
-                          {formatShortDayMonth(row.isoDate)}
-                        </span>
-                        <span className="ml-1.5 text-xs text-muted">
-                          /{row.isoDate.slice(0, 4)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3.5 whitespace-nowrap text-[#475569]">
-                        {weekdayLabelShort(dayKey)}
-                      </td>
-                      <td className="px-3 py-3.5 font-medium text-ink">
-                        {row.locationName}
-                      </td>
-                      <td className="px-3 py-3.5 text-[#334155]">
-                        {row.conductorNames.length > 0
-                          ? row.conductorNames.join(', ')
-                          : '—'}
-                      </td>
-                      <td className="px-3 py-3.5">
+          return (
+            <>
+              {/* Mobile card list (< md) */}
+              <div className="divide-y divide-line md:hidden">
+                {enrichedRows.map(({ row, dayKey, territoryBadgeText, statusBadge }) => (
+                  <div
+                    key={row.id}
+                    onClick={() => setSelectedEntryId(row.id)}
+                    className="cursor-pointer space-y-2.5 p-4 transition active:bg-[#F8FAFC]"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="inline-flex items-center rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-2.5 py-0.5 text-xs font-semibold text-[#4338CA]">
-                            {territoryBadgeText}
+                          <span className="text-sm font-semibold text-ink" title={formatFullDateBr(row.isoDate)}>
+                            {formatShortDayMonth(row.isoDate)}
+                            <span className="text-xs font-normal text-muted">/{row.isoDate.slice(0, 4)}</span>
                           </span>
-                          {row.kind === 'workSession' ? (
-                            row.completionState === 'partial' ? (
-                              <span className="rounded-full bg-[#DBEAFE] px-2 py-0.5 text-[10px] font-semibold text-[#1E40AF]">
-                                Parcial (parte)
-                              </span>
-                            ) : row.completionState === 'incomplete' ? (
-                              <span className="rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-semibold text-[#92400E]">
-                                Incompleto
-                              </span>
-                            ) : (
-                              <span className="rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#166534]">
-                                Trabalhado
-                              </span>
-                            )
-                          ) : row.executedTerritoryIds.length > 0 ? (
-                            <span className="rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#166534]">
-                              Execução registrada
-                            </span>
-                          ) : (
-                            <span className="rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#475569]">
-                              Designado
-                            </span>
-                          )}
+                          <span className="text-xs text-muted">· {weekdayLabelShort(dayKey)}</span>
                           {row.periodType ? (
                             <span className="rounded-full bg-[#F8FAFC] px-2 py-0.5 text-[10px] font-medium text-muted">
                               {periodTypeLabel(row.periodType)}
                             </span>
                           ) : null}
                         </div>
-                      </td>
-                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                        <div className="inline-flex items-center justify-end gap-1">
+                        <p className="mt-1 truncate text-sm font-medium text-ink">{row.locationName}</p>
+                        <p className="truncate text-xs text-muted">
+                          Dirigente: {row.conductorNames.length > 0 ? row.conductorNames.join(', ') : '—'}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedEntryId(row.id)
+                          }}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-[#EEF2FF] hover:text-indigo"
+                          aria-label="Ver detalhes da designação"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        {canManage ? (
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation()
-                              setSelectedEntryId(row.id)
+                              void handleDeleteEntry(row)
                             }}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-[#EEF2FF] hover:text-indigo"
-                            aria-label="Ver detalhes da designação"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-[#FEE2E2] hover:text-[#DC2626]"
+                            aria-label="Excluir registro"
+                            title="Excluir registro"
                           >
-                            <Eye size={16} />
+                            <Trash2 size={15} />
                           </button>
-                          {canManage ? (
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="inline-flex items-center rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-2.5 py-0.5 text-xs font-semibold text-[#4338CA]">
+                        {territoryBadgeText}
+                      </span>
+                      {statusBadge}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tablet & Desktop table (md+) */}
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-line bg-[#F8FAFC] text-xs font-semibold text-muted">
+                      <th className="px-5 py-3">Data</th>
+                      <th className="px-3 py-3">Dia</th>
+                      <th className="px-3 py-3">
+                        {historyView === 'confirmed' ? 'Região / Local' : 'Local da saída'}
+                      </th>
+                      <th className="px-3 py-3">Dirigente(s)</th>
+                      <th className="px-3 py-3">
+                        {historyView === 'confirmed' ? 'Territórios feitos' : 'Territórios designados'}
+                      </th>
+                      <th className="px-5 py-3 text-right">Detalhes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {enrichedRows.map(({ row, dayKey, territoryBadgeText, statusBadge }) => (
+                      <tr
+                        key={row.id}
+                        onClick={() => setSelectedEntryId(row.id)}
+                        className="cursor-pointer transition hover:bg-[#F8FAFC]"
+                      >
+                        <td className="px-5 py-3.5 font-medium whitespace-nowrap text-ink">
+                          <span title={formatFullDateBr(row.isoDate)}>
+                            {formatShortDayMonth(row.isoDate)}
+                          </span>
+                          <span className="ml-1.5 text-xs text-muted">
+                            /{row.isoDate.slice(0, 4)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3.5 whitespace-nowrap text-[#475569]">
+                          {weekdayLabelShort(dayKey)}
+                        </td>
+                        <td className="px-3 py-3.5 font-medium text-ink">
+                          {row.locationName}
+                        </td>
+                        <td className="px-3 py-3.5 text-[#334155]">
+                          {row.conductorNames.length > 0
+                            ? row.conductorNames.join(', ')
+                            : '—'}
+                        </td>
+                        <td className="px-3 py-3.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="inline-flex items-center rounded-full border border-[#C7D2FE] bg-[#EEF2FF] px-2.5 py-0.5 text-xs font-semibold text-[#4338CA]">
+                              {territoryBadgeText}
+                            </span>
+                            {statusBadge}
+                            {row.periodType ? (
+                              <span className="rounded-full bg-[#F8FAFC] px-2 py-0.5 text-[10px] font-medium text-muted">
+                                {periodTypeLabel(row.periodType)}
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                          <div className="inline-flex items-center justify-end gap-1">
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                void handleDeleteEntry(row)
+                                setSelectedEntryId(row.id)
                               }}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-[#FEE2E2] hover:text-[#DC2626]"
-                              aria-label="Excluir registro"
-                              title="Excluir registro"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-[#EEF2FF] hover:text-indigo"
+                              aria-label="Ver detalhes da designação"
                             >
-                              <Trash2 size={15} />
+                              <Eye size={16} />
                             </button>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                            {canManage ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  void handleDeleteEntry(row)
+                                }}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-[#FEE2E2] hover:text-[#DC2626]"
+                                aria-label="Excluir registro"
+                                title="Excluir registro"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )
+        })()}
       </div>
         </>
       ) : (

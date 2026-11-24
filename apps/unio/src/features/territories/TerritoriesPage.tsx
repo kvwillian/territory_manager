@@ -90,7 +90,7 @@ function TerritoriesPageContent() {
       </div>
 
       {/* 4-Tab Bar */}
-      <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto border-b border-line">
+      <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-line bg-white p-1.5 sm:flex sm:items-center sm:gap-1.5 sm:rounded-none sm:border-0 sm:border-b sm:bg-transparent sm:p-0">
         {TABS.map((tab) => {
           const Icon = tab.icon
           const isActive = tab.key === activeTabKey
@@ -99,14 +99,14 @@ function TerritoriesPageContent() {
               key={tab.key}
               type="button"
               onClick={() => navigate(tab.path)}
-              className={`-mb-px inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-t-xl border border-b-2 px-3.5 py-2.5 text-sm font-semibold transition sm:px-4 ${
+              className={`inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold transition sm:-mb-px sm:justify-start sm:rounded-b-none sm:rounded-t-xl sm:border sm:border-b-2 sm:px-4 sm:text-sm ${
                 isActive
-                  ? 'border-line border-b-indigo bg-white text-indigo shadow-[0_-1px_2px_rgba(15,23,42,0.03)]'
-                  : 'border-transparent bg-transparent text-[#475569] hover:bg-white/60 hover:text-ink'
+                  ? 'bg-indigo-soft text-indigo sm:border-line sm:border-b-indigo sm:bg-white sm:shadow-[0_-1px_2px_rgba(15,23,42,0.03)]'
+                  : 'bg-transparent text-[#475569] hover:bg-[#F8FAFC] hover:text-ink sm:border-transparent sm:hover:bg-white/60'
               }`}
             >
-              <Icon size={16} className={isActive ? 'text-indigo' : 'text-muted'} />
-              {tab.label}
+              <Icon size={16} className={`shrink-0 ${isActive ? 'text-indigo' : 'text-muted'}`} />
+              <span className="truncate">{tab.label}</span>
             </button>
           )
         })}
