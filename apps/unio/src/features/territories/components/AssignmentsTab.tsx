@@ -162,6 +162,7 @@ export function AssignmentsTab({
   const [suggestionOpen, setSuggestionOpen] = useState(false)
   const [suggestionDetailsOpen, setSuggestionDetailsOpen] = useState(false)
   const [inspectedTerritoryId, setInspectedTerritoryId] = useState<string | null>(null)
+  const [pendingSelectAssignmentId, setPendingSelectAssignmentId] = useState<string | null>(null)
 
   // Feedback & drawers
   const [savingMode, setSavingMode] = useState<'none' | 'draft' | 'assigned'>('none')
@@ -377,19 +378,28 @@ export function AssignmentsTab({
     const extraCount = extraManualSlots[selectedIsoDate] ?? 0
     for (let i = 0; i < extraCount; i += 1) {
       const defGroup = dayKey === 'sunday' ? (sundayGroups[0] ?? null) : null
+      const usedLocIds = new Set(slots.map((s) => s.meetingLocationId).filter(Boolean))
+      const fallbackLoc =
+        locations.find((l) => !usedLocIds.has(l.id)) ?? locations[0] ?? null
+      const hasMorningAlready = slots.some((s) => s.periodType === 'morning')
+      const defaultPeriod: DeparturePeriodType =
+        dayKey === 'sunday' ? 'sunday' : hasMorningAlready ? 'afternoon' : 'morning'
+      const defaultTime = defaultPeriod === 'afternoon' ? '17:00' : '09:00'
       slots.push({
         slotKey: `manual:${selectedIsoDate}:${i}`,
         savedAssignment: null,
         recurringTemplate: null,
-        periodType: dayKey === 'sunday' ? 'sunday' : 'morning',
-        startTime: dayKey === 'sunday' ? '09:00' : '09:00',
-        meetingLocationId: null,
+        periodType: defaultPeriod,
+        startTime: defaultTime,
+        meetingLocationId: fallbackLoc?.id ?? null,
         preachingSessionId: null,
-        locationName: '',
+        locationName: fallbackLoc?.name ?? '',
         groupId: defGroup?.id ?? null,
         groupName: defGroup?.name ?? null,
         conductorNames: getDefaultConductorsFor({
           dayOfWeek: dayKey,
+          meetingLocationId: fallbackLoc?.id ?? null,
+          locationName: fallbackLoc?.name ?? '',
           groupId: defGroup?.id ?? null,
           groupName: defGroup?.name ?? null,
         }),
@@ -591,9 +601,21 @@ export function AssignmentsTab({
   }, [
     selectedIsoDate,
     activeSlot.slotKey,
+    activeSlot.savedAssignment?.status,
     activeSlot.savedAssignment?.updatedAtIso,
     segmentsByTerritoryId,
   ])
+
+  useEffect(() => {
+    if (!pendingSelectAssignmentId) return
+    const idx = daySlots.findIndex(
+      (s) => s.savedAssignment?.id === pendingSelectAssignmentId,
+    )
+    if (idx >= 0) {
+      setSelectedSlotIndex(idx)
+      setPendingSelectAssignmentId(null)
+    }
+  }, [daySlots, pendingSelectAssignmentId])
 
   // Hydrate pre-selected conductors / location when async catalog finishes loading and form isn't dirty
   useEffect(() => {
@@ -1121,7 +1143,7 @@ export function AssignmentsTab({
         }
       }
 
-      await saveAssignment({
+      const savedId = await saveAssignment({
         id: activeSlot.savedAssignment?.id,
         isoDate: selectedIsoDate,
         status: targetStatus,
@@ -1138,6 +1160,15 @@ export function AssignmentsTab({
         assignedSegmentsByTerritory: cleanAssignedSegmentsMap,
         notes,
       })
+      if (activeSlot.slotKey.startsWith('manual:')) {
+        setExtraManualSlots((curr) => ({
+          ...curr,
+          [selectedIsoDate]: Math.max(0, (curr[selectedIsoDate] ?? 1) - 1),
+        }))
+        if (savedId) {
+          setPendingSelectAssignmentId(savedId)
+        }
+      }
       setSelectedTerritoryIds(effectiveTerritoryIds)
       setIsDirty(false)
       showToast(
@@ -1352,33 +1383,59 @@ export function AssignmentsTab({
               <div className="mt-3 space-y-1.5">
                 {weekdayKeyFromIso(selectedIsoDate) === 'sunday' ? (
                   <span className="block text-[11px] font-semibold text-muted">
-                    Selecione o grupo para definir a saída e os territórios:
+                    Selecione o grupo para definir a saída e os territórios ({daySlots.length} no dia):
+                  </span>
+                ) : daySlots.length > 1 ? (
+                  <span className="block text-[11px] font-semibold text-muted">
+                    Saídas deste dia ({daySlots.length}):
                   </span>
                 ) : null}
                 <div className="flex flex-wrap items-center gap-1.5">
                   {daySlots.map((slot, idx) => {
                     const active = idx === safeSlotIndex
+                    const isManualUnsaved = slot.slotKey.startsWith('manual:')
                     const labelText = slot.groupName
                       ? `${slot.groupName}${slot.territoryIds.length > 0 ? ` (${slot.territoryIds.length})` : ''}`
-                      : `${slot.startTime} • ${slot.locationName || 'Saída manual'}`
+                      : `${slot.startTime} • ${slot.locationName || 'Nova saída'}${slot.territoryIds.length > 0 ? ` (${slot.territoryIds.length})` : ''}`
                     return (
-                      <button
+                      <div
                         key={slot.slotKey}
-                        type="button"
-                        onClick={() => setSelectedSlotIndex(idx)}
-                        className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
+                        className={`inline-flex items-center rounded-lg border transition ${
                           active
                             ? 'border-indigo bg-[#EEF2FF] text-indigo font-semibold'
                             : 'border-line bg-[#F8FAFC] text-[#475569] hover:text-ink'
                         }`}
                       >
-                        {slot.savedAssignment?.status === 'assigned' ? (
-                          <CheckCircle2 size={12} className="text-[#16A34A]" />
-                        ) : slot.savedAssignment?.status === 'draft' ? (
-                          <Clock size={12} className="text-indigo" />
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSlotIndex(idx)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium"
+                        >
+                          {slot.savedAssignment?.status === 'assigned' ? (
+                            <CheckCircle2 size={12} className="text-[#16A34A]" />
+                          ) : slot.savedAssignment?.status === 'draft' ? (
+                            <Clock size={12} className="text-indigo" />
+                          ) : null}
+                          <span>{labelText}</span>
+                        </button>
+                        {isManualUnsaved && canManage ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExtraManualSlots((curr) => ({
+                                ...curr,
+                                [selectedIsoDate]: Math.max(0, (curr[selectedIsoDate] ?? 1) - 1),
+                              }))
+                              setSelectedSlotIndex((prev) => Math.max(0, prev - 1))
+                            }}
+                            className="mr-1 rounded p-0.5 text-muted hover:bg-[#FEE2E2] hover:text-[#DC2626]"
+                            aria-label="Cancelar nova saída"
+                            title="Remover saída não salva"
+                          >
+                            <X size={11} />
+                          </button>
                         ) : null}
-                        <span>{labelText}</span>
-                      </button>
+                      </div>
                     )
                   })}
 
@@ -1393,11 +1450,11 @@ export function AssignmentsTab({
                         }))
                         setSelectedSlotIndex(daySlots.length)
                       }}
-                      className="inline-flex items-center gap-1 rounded-lg border border-dashed border-line px-2.5 py-1 text-xs font-medium text-muted hover:border-indigo hover:text-indigo"
+                      className="inline-flex items-center gap-1 rounded-lg border border-dashed border-[#C7D2FE] bg-white px-2.5 py-1 text-xs font-semibold text-indigo transition hover:bg-[#EEF2FF]"
                       title="Planejar mais uma saída neste mesmo dia"
                     >
                       <Plus size={12} />
-                      Outra saída
+                      {daySlots.length === 1 ? 'Adicionar 2ª saída' : 'Outra saída'}
                     </button>
                   ) : null}
                 </div>
